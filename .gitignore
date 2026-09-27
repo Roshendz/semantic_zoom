@@ -1,0 +1,11 @@
+.DS_Store
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.idea/
+*.iml
+.fvm/
+pubspec.lock
+example/build/

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Flutter ${{ matrix.flutter }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # "pinned" = version in .fvmrc; 3.22.x = minimum in pubspec.yaml.
+        flutter: [pinned, 3.22.x]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Resolve Flutter version
+        run: |
+          if [ "${{ matrix.flutter }}" = pinned ]; then
+            echo "FLUTTER_VERSION=$(jq -r .flutter .fvmrc)" >> "$GITHUB_ENV"
+          else
+            echo "FLUTTER_VERSION=${{ matrix.flutter }}" >> "$GITHUB_ENV"
+          fi
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      # The example targets the latest SDK; the minimum-SDK job checks only
+      # the package itself.
+      - if: matrix.flutter == 'pinned'
+        run: flutter pub get
+      - if: matrix.flutter != 'pinned'
+        run: flutter pub get --no-example
+      - if: matrix.flutter == 'pinned'
+        run: dart format --output=none --set-exit-if-changed lib test example/lib
+      - if: matrix.flutter == 'pinned'
+        run: flutter analyze --fatal-infos
+      - run: flutter test
+      - if: matrix.flutter == 'pinned'
+        working-directory: example
+        run: flutter test
+      - if: matrix.flutter == 'pinned'
+        run: flutter pub publish --dry-run
