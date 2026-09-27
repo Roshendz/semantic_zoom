@@ -29,11 +29,11 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       # The example targets the latest SDK; the minimum-SDK job checks only
-      # the package itself.
-      - if: matrix.flutter == 'pinned'
-        run: flutter pub get
+      # the package itself. Older Flutter versions still touch example/ after
+      # `pub get --no-example`, so remove it from this throwaway checkout.
       - if: matrix.flutter != 'pinned'
-        run: flutter pub get --no-example
+        run: rm -rf example
+      - run: flutter pub get
       - if: matrix.flutter == 'pinned'
         run: dart format --output=none --set-exit-if-changed lib test example/lib
       - if: matrix.flutter == 'pinned'
