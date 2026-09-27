@@ -1,8 +1,8 @@
 name: semantic_zoom
 description: >-
-  Pinch or tap to stretch text from a brief title to full notes. StretchText /
-  telescopic text for Flutter lists: words slide and morph, not scale.
-version: 0.1.0
+  Pinch or tap to stretch text from a brief title to full notes: an animated
+  read more and StretchText for Flutter, with rich text and LLM helpers.
+version: 0.2.0
 homepage: https://roshendz.github.io/semantic_zoom/
 repository: https://github.com/Roshendz/semantic_zoom
 issue_tracker: https://github.com/Roshendz/semantic_zoom/issues

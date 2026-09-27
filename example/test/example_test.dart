@@ -29,6 +29,15 @@ void main() {
     await tester.tap(find.text('Subject'));
     await tester.pumpAndSettle();
 
+    // Reads: one expandable card, no controller.
+    await tester.tap(find.byIcon(Icons.article));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Show more').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Show more').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Show less'), findsOneWidget);
+
     expect(tester.takeException(), isNull);
   });
 }

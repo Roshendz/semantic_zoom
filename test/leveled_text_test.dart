@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:semantic_zoom/semantic_zoom.dart';
 
@@ -9,7 +10,8 @@ void main() {
         LeveledToken(',', 2, glued: true),
         LeveledToken('old', 2),
         LeveledToken('to', 1),
-        LeveledToken('Alfama.', 0),
+        LeveledToken('Alfama', 0),
+        LeveledToken('.', 0, glued: true),
       ]);
     });
 
@@ -125,5 +127,117 @@ void main() {
   test('equality is by tokens', () {
     expect(LeveledText.parse('a [b]'), LeveledText.parse('a [b]'));
     expect(LeveledText.parse('a [b]'), isNot(LeveledText.parse('a {b}')));
+  });
+
+  group('rich markup', () {
+    const bold = TextStyle(fontWeight: FontWeight.bold);
+    const italic = TextStyle(fontStyle: FontStyle.italic);
+
+    test('bold, italic and links in parse', () {
+      final t = LeveledText.parse(
+        'Tram **28**[ to *Alfama*]{, see [the map](https://ex.am/p).}',
+      );
+      expect(t.textAt(0), 'Tram 28');
+      expect(t.textAt(2), 'Tram 28 to Alfama, see the map.');
+      final byText = {for (final k in t.tokens) k.text: k};
+      expect(byText['28']!.style, bold);
+      expect(byText['Alfama']!.style, italic);
+      expect(byText['Alfama']!.minLevel, 1);
+      expect(byText['the']!.link, 'https://ex.am/p');
+      expect(byText['map']!.link, 'https://ex.am/p');
+      expect(byText['map']!.minLevel, 2);
+      expect(byText['see']!.link, isNull);
+    });
+
+    test('a bracket group without (url) is still a level', () {
+      final t = LeveledText.parse('[Took] a [tram](x) up');
+      expect(t.textAt(0), 'a tram up');
+      expect(t.textAt(1), 'Took a tram up');
+      expect(t.tokens.firstWhere((k) => k.text == 'tram').link, 'x');
+    });
+
+    test('style changes inside a word keep it glued', () {
+      final t = LeveledText.parse('**Note:** read this');
+      expect(t.textAt(0), 'Note: read this');
+      expect(t.tokens[0].style, bold);
+      expect(t.tokens[1].text, ':');
+      expect(t.tokens[1].glued, isTrue);
+      expect(t.tokens[2].style, isNull);
+    });
+
+    test('lone asterisks and escapes stay literal', () {
+      expect(LeveledText.parse('5 * 3 = 15').textAt(0), '5 * 3 = 15');
+      final t = LeveledText.parse(r'\[not a level\] and \*literal\*');
+      expect(t.textAt(0), '[not a level] and *literal*');
+      expect(t.tokens.every((k) => k.style == null), isTrue);
+    });
+
+    test('fromVersions reads markdown from LLM output', () {
+      final t = LeveledText.fromVersions(const [
+        'Knee review',
+        'Knee review: **cleared to run**',
+        'Knee review: **cleared to run** twice a week, see [plan](p1).',
+      ]);
+      expect(t.textAt(1), 'Knee review: cleared to run');
+      expect(
+        t.textAt(2),
+        'Knee review: cleared to run twice a week, see plan.',
+      );
+      expect(t.tokens.firstWhere((k) => k.text == 'run').style, bold);
+      expect(t.tokens.firstWhere((k) => k.text == 'plan').link, 'p1');
+    });
+
+    test('brackets are literal in fromVersions', () {
+      final t = LeveledText.fromVersions(const ['a [b] c', 'a [b] c d']);
+      expect(t.textAt(0), 'a [b] c');
+    });
+  });
+
+  group('checkVersions', () {
+    test('strict versions', () {
+      final r = LeveledText.checkVersions(const [
+        'Knee review',
+        'Knee review: swelling reduced, cleared to run',
+        'Knee review after six sessions: swelling reduced and range of '
+            'motion restored, cleared to run twice a week.',
+      ]);
+      expect(r.isStrict, isTrue);
+      expect(r.smoothness, 1);
+      expect(r.issues, isEmpty);
+      expect(r.transitions.first.kept, 2);
+      expect(r.transitions.first.added, 5);
+    });
+
+    test('rewrites are reported with the dropped words', () {
+      final r = LeveledText.checkVersions(const [
+        'Checkout crash fixed',
+        'Android checkout crash is fixed in version 4.2.1',
+      ]);
+      expect(r.isStrict, isFalse);
+      expect(r.transitions.single.dropped, ['Checkout']);
+      expect(r.smoothness, closeTo(2 / 3, 1e-9));
+      expect(r.issues.single, contains('"Checkout"'));
+    });
+
+    test('unrelated versions warn that they will cross-fade', () {
+      final r = LeveledText.checkVersions(const ['Alpha beta', 'Gamma delta']);
+      expect(r.smoothness, 0);
+      expect(r.issues.any((i) => i.contains('keeps only 0%')), isTrue);
+    });
+
+    test('identical and empty levels are flagged', () {
+      expect(
+        LeveledText.checkVersions(const ['a b', 'a b']).issues,
+        contains('Level 1 adds nothing to level 0.'),
+      );
+      expect(
+        LeveledText.checkVersions(const ['', 'a']).issues,
+        contains('Level 0 is empty.'),
+      );
+      expect(
+        LeveledText.checkVersions(const ['only one']).issues,
+        isNotEmpty,
+      );
+    });
   });
 }

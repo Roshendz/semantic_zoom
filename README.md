@@ -49,6 +49,12 @@ It suits anything with summaries and details:
 - 👆 **Whole list or one item.** Pinch changes every entry; tap (or any
   callback) changes one entry with `setItemLevel`. The next pinch brings
   every entry back into step.
+- 📖 **Animated "read more" in one widget.** `ExpandableLeveledText` expands
+  a single text in place on tap, with no list or controller to set up.
+- 🅱️ **Rich text.** `**bold**`, `*italic*` and `[links](https://…)` in any
+  level. Links are real tap targets and are announced as links.
+- 🤖 **LLM-ready.** A ready-made prompt asks a model for versions that
+  morph smoothly, and `checkVersions` tells you how well it complied.
 - 📌 **Lag-free scroll anchoring.** A custom sliver corrects the scroll offset
   *during layout*, so the item under your fingers doesn't drift, not even by
   one frame.
@@ -136,6 +142,27 @@ ListenableBuilder(
 )
 ```
 
+## Just one expandable text
+
+Don't need a pinchable list? `ExpandableLeveledText` is an animated
+"read more": each tap morphs to the next level, then back to the first.
+
+```dart
+ExpandableLeveledText(
+  LeveledText.parse(
+    'Offline-first apps feel faster[ because they read local data first]'
+    '{ and sync in the background.}',
+  ),
+  footerBuilder: (context, level, maxLevel, toggle) => TextButton(
+    onPressed: toggle,
+    child: Text(level < maxLevel ? 'Show more' : 'Show less'),
+  ),
+)
+```
+
+Use a `GlobalKey<ExpandableLeveledTextState>` to call `expand()`,
+`collapse()` or `next()` from elsewhere, and `onLevelChanged` to persist it.
+
 ## Your content
 
 | | Input | Best for |
@@ -157,10 +184,62 @@ LeveledText.fromVersions(const [
 ```
 
 The smoothest morphs come from versions that *add* words to the shorter one
-(StretchText style). When an LLM writes the summaries, asking it to keep
-the words of the shorter version works well. To enforce that strictly, for
-example when validating backend data, pass `requireSubsequence: true` and
-`fromVersions` throws an `ArgumentError` on any rewrite.
+(StretchText style). To enforce that strictly, for example when validating
+backend data, pass `requireSubsequence: true` and `fromVersions` throws an
+`ArgumentError` on any rewrite.
+
+## Rich text
+
+Both `parse` and `fromVersions` read a small inline markup, at any level:
+
+| Markup | Result |
+|---|---|
+| `**bold**` | **bold** |
+| `*italic*` | *italic* |
+| `[label](https://example.com)` | a link |
+| `\[`, `\*`, `\{` … | a literal character |
+
+```dart
+LeveledTextView(
+  LeveledText.parse(
+    'Day trip to [Sintra](https://en.wikipedia.org/wiki/Sintra)'
+    '[. **Pena Palace** was lost in fog]{ until noon.}',
+  ),
+  linkStyle: LeveledTextView.defaultLinkStyle.copyWith(color: Colors.teal),
+  onLinkTap: (url) => launchUrl(Uri.parse(url)), // e.g. url_launcher
+)
+```
+
+A bracket group directly followed by `(url)` is a link; any other `[…]` is a
+level. A lone `*` with spaces around it, as in `5 * 3`, stays literal. For
+full control, build `LeveledToken`s yourself with any `TextStyle`.
+
+## Summaries from an LLM
+
+`LeveledPrompt` builds a prompt that asks a model for versions where each
+longer one keeps every word of the shorter one, which morphs best. Models
+don't always comply, so check the result before showing it:
+
+```dart
+final prompt = LeveledPrompt.build(
+  source: visitNotes,
+  levelDescriptions: const [
+    'a visit title of at most 5 words',
+    'a one-sentence summary',
+    'the full clinician notes, lightly edited',
+  ],
+  instructions: 'Write for the patient, in plain language.',
+);
+final reply = await llm.complete(prompt);          // any LLM client
+final versions = LeveledPrompt.parseResponse(reply); // tolerates ```json fences
+
+final report = LeveledText.checkVersions(versions);
+report.isStrict;    // true if every level only adds words
+report.smoothness;  // 0..1: share of words that carry over
+report.issues;      // e.g. 'Level 2 drops 1 word of level 1 ("Checkout")…'
+
+final text = LeveledText.fromVersions(versions); // rewrites still cross-fade
+```
 
 ## Per-item zoom
 
@@ -227,8 +306,10 @@ zoom.addListener(() => settingsCubit.saveDetailLevel(zoom.level));
 | `SemanticZoomListView.builder` | Ready-made list: detector + scroll view + anchored sliver |
 | `SemanticZoomDetector` | Turns touch, trackpad, wheel and keyboard input into zoom |
 | `SliverSemanticZoomList` | `SliverList` with scroll anchoring applied during layout |
-| `LeveledTextView` | Paints `LeveledText`, morphing between levels; `itemId` for per-item zoom |
-| `LeveledText` / `LeveledToken` | The data model, with `parse` and `fromVersions` |
+| `LeveledTextView` | Paints `LeveledText`, morphing between levels; `itemId` for per-item zoom; `onLinkTap` |
+| `ExpandableLeveledText` | One tap-to-expand text, no controller needed |
+| `LeveledText` / `LeveledToken` | The data model, with `parse`, `fromVersions` and `checkVersions` |
+| `LeveledPrompt` | LLM prompt builder and response parser |
 | `LeveledTextLayout` | The cached layout engine, if you want to paint it yourself |
 
 ## How it works
@@ -251,7 +332,7 @@ zoom.addListener(() => settingsCubit.saveDetailLevel(zoom.level));
 
 ## Limitations
 
-- Plain text only for now; rich text (bold, links) is planned.
+- Inline widgets (chips, icons) inside text aren't supported yet.
 - `LeveledText.parse` markup covers three levels; use `fromVersions` for more.
 - Vertical and left-to-right horizontal lists (`AxisDirection.down` and
   `right`); reversed lists aren't anchored yet.

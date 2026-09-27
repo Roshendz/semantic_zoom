@@ -34,7 +34,7 @@ class _HomeState extends State<_Home> {
     body: SafeArea(
       child: IndexedStack(
         index: _tab,
-        children: const [TravelDemo(), HealthDemo(), InboxDemo()],
+        children: const [TravelDemo(), HealthDemo(), InboxDemo(), ReadsDemo()],
       ),
     ),
     bottomNavigationBar: NavigationBar(
@@ -44,6 +44,7 @@ class _HomeState extends State<_Home> {
         NavigationDestination(icon: Icon(Icons.map), label: 'Travel'),
         NavigationDestination(icon: Icon(Icons.monitor_heart), label: 'Health'),
         NavigationDestination(icon: Icon(Icons.inbox), label: 'Inbox'),
+        NavigationDestination(icon: Icon(Icons.article), label: 'Reads'),
       ],
     ),
   );
@@ -59,7 +60,7 @@ final _trip = [
     'Sun 15 Sep',
     'Lisbon',
     LeveledText.parse(
-      '[Took] Tram 28 [up] to Alfama{, standing room only and every curve a '
+      '[Took] Tram 28 [up] to **Alfama**{, standing room only and every curve a '
       'small adventure}[. Got lost on purpose and found a tiny bakery.]\n'
       '{Pastéis de nata still warm from the oven. I ate three before '
       'admitting it was lunch.}',
@@ -69,7 +70,8 @@ final _trip = [
     'Mon 16 Sep',
     'Sintra',
     LeveledText.parse(
-      'Day trip to Sintra[. Pena Palace was lost in fog]{ until noon, then the '
+      'Day trip to [Sintra](https://en.wikipedia.org/wiki/Sintra)[. '
+      '**Pena Palace** was lost in fog]{ until noon, then the '
       'whole valley opened up below us}[. Walked back down through the '
       'forest.] {My legs will remember this tomorrow.}',
     ),
@@ -78,7 +80,7 @@ final _trip = [
     'Tue 17 Sep',
     'Lisbon',
     LeveledText.parse(
-      'Fado {night} in Mouraria[, a tiny room with twelve tables.] {The singer '
+      '*Fado* {night} in **Mouraria**[, a tiny room with twelve tables.] {The singer '
       'closed her eyes for the last song and nobody moved, not even the '
       'waiters.}',
     ),
@@ -191,6 +193,8 @@ class _TravelDemoState extends State<TravelDemo>
                                 style: theme.textTheme.bodyLarge?.copyWith(
                                   height: 1.4,
                                 ),
+                                linkStyle: _linkStyle(context),
+                                onLinkTap: (url) => _openLink(context, url),
                               ),
                             ],
                           ),
@@ -260,9 +264,9 @@ final _visits = [
     'Cardiology',
     LeveledText.fromVersions(const [
       'Blood pressure follow-up',
-      'Blood pressure follow-up: readings improved, dose unchanged',
-      'Blood pressure follow-up: home readings averaged 128/82 over four '
-          'weeks, readings improved since January, dose unchanged. Continue '
+      'Blood pressure follow-up: readings improved, **dose unchanged**',
+      'Blood pressure follow-up: home readings averaged **128/82** over four '
+          'weeks, readings improved since January, **dose unchanged**. Continue '
           'low-sodium diet and review again in three months.',
     ]),
   ),
@@ -521,7 +525,106 @@ class _InboxDemoState extends State<InboxDemo>
   }
 }
 
+// ─────────────── Reads: ExpandableLeveledText, no controller ───────────────
+//
+// The one-widget "read more": each card expands in place on tap or with the
+// Show more button.
+
+final _articles = [
+  (
+    'Designing for one hand',
+    LeveledText.parse(
+      'Most phone use is **one-handed**[, so the thumb decides what is easy '
+      'to reach.]{ Put frequent actions in the bottom third of the screen, '
+      'keep destructive ones out of easy reach, and test on the largest '
+      'phones your users own. See the '
+      '[Material layout guide](https://m3.material.io/foundations/layout/understanding-layout/overview).}',
+    ),
+  ),
+  (
+    'Why offline-first feels faster',
+    LeveledText.parse(
+      'Offline-first apps feel faster[ because they read local data first]'
+      '{ and sync in the background. People never wait for the network to '
+      'see what they already have, and a flaky connection stops being an '
+      'error screen.}',
+    ),
+  ),
+  (
+    'Accessibility is a feature',
+    LeveledText.parse(
+      'Screen readers[, larger text] and reduced motion[ are used by more '
+      'people than most teams expect.]{ Designing for them early is cheaper '
+      'than retrofitting, and it usually makes the app *better for '
+      'everyone*.}',
+    ),
+  ),
+];
+
+class ReadsDemo extends StatelessWidget {
+  const ReadsDemo({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        const _SectionTitle(
+          title: 'Reads',
+          subtitle: 'Tap an article or use Show more. No controller needed.',
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            itemCount: _articles.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemBuilder: (context, i) {
+              final (title, text) = _articles[i];
+              return Card.outlined(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 8, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      ExpandableLeveledText(
+                        text,
+                        style: theme.textTheme.bodyLarge?.copyWith(height: 1.4),
+                        linkStyle: _linkStyle(context),
+                        onLinkTap: (url) => _openLink(context, url),
+                        footerBuilder: (context, level, max, toggle) => Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: toggle,
+                            child: Text(
+                              level < max ? 'Show more' : 'Show less',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ───────────────────────────── shared ─────────────────────────────
+
+TextStyle _linkStyle(BuildContext context) => LeveledTextView.defaultLinkStyle
+    .copyWith(color: Theme.of(context).colorScheme.primary);
+
+/// The example has no url_launcher dependency, so it just shows the link.
+void _openLink(BuildContext context, String url) =>
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('Open $url')));
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title, required this.subtitle});

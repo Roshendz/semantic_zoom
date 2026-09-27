@@ -32,7 +32,9 @@ class LeveledTextLayout {
     required TextScaler textScaler,
     required TextDirection textDirection,
     this.paragraphGap = 6,
+    TextStyle? linkStyle,
   })  : _style = style,
+        _linkStyle = linkStyle,
         _textScaler = textScaler,
         _textDirection = textDirection,
         rewrittenLevels = {
@@ -40,7 +42,23 @@ class LeveledTextLayout {
             if (t.maxLevel != null) t.maxLevel! + 1,
         } {
     painters = [
-      for (final t in text.tokens) _painter(t.isBreak ? '' : t.text)..layout(),
+      for (final t in text.tokens)
+        _painter(TextSpan(text: t.isBreak ? '' : t.text, style: styleOf(t)))
+          ..layout(),
+    ];
+    final tokens = text.tokens;
+    linkGapPainters = [
+      for (var i = 0; i < tokens.length; i++)
+        if (i + 1 < tokens.length &&
+            tokens[i].link != null &&
+            tokens[i + 1].link == tokens[i].link &&
+            !tokens[i + 1].glued)
+          // A no-break space: the engine doesn't decorate a plain trailing
+          // space, so a lone ' ' would paint no underline.
+          _painter(TextSpan(text: '\u00A0', style: styleOf(tokens[i + 1])))
+            ..layout()
+        else
+          null,
     ];
   }
 
@@ -55,16 +73,30 @@ class LeveledTextLayout {
   final Set<int> rewrittenLevels;
 
   final TextStyle _style;
+  final TextStyle? _linkStyle;
   final TextScaler _textScaler;
   final TextDirection _textDirection;
 
   /// One painter per token, reused across all levels.
   late final List<TextPainter> painters;
 
+  /// For a link word followed by another word of the same link, a painter
+  /// for the space between them, so the link's underline is continuous.
+  late final List<TextPainter?> linkGapPainters;
+
   final _cache = <(int, double), LevelLayout>{};
 
-  TextPainter _painter(String s) => TextPainter(
-        text: TextSpan(text: s, style: _style),
+  /// The full style of [token]: the base style, its own style, and the
+  /// link style for links.
+  TextStyle styleOf(LeveledToken token) {
+    var s = _style;
+    if (token.style != null) s = s.merge(token.style);
+    if (token.link != null && _linkStyle != null) s = s.merge(_linkStyle);
+    return s;
+  }
+
+  TextPainter _painter(InlineSpan span) => TextPainter(
+        text: span,
         textDirection: _textDirection,
         textScaler: _textScaler,
       );
@@ -75,7 +107,15 @@ class LeveledTextLayout {
 
   LevelLayout _compute(int level, double maxWidth) {
     final tokens = text.tokens;
-    final buf = StringBuffer();
+    // The paragraph is built from styled spans so bold, italic and links are
+    // measured exactly as they are painted.
+    final spans = <InlineSpan>[];
+    var length = 0;
+    void add(String s, [TextStyle? style]) {
+      spans.add(TextSpan(text: s, style: style));
+      length += s.length;
+    }
+
     final ranges = List<(int, int)?>.filled(tokens.length, null);
     final paragraphOf = List<int>.filled(tokens.length, 0);
     var paragraph = 0;
@@ -86,25 +126,25 @@ class LeveledTextLayout {
       if (!t.isVisibleAt(level)) continue;
       if (t.isBreak) {
         // Collapse breaks that would produce empty paragraphs at this level.
-        pendingBreak = buf.isNotEmpty;
+        pendingBreak = length > 0;
         continue;
       }
       if (pendingBreak) {
-        buf.write('\n');
+        add('\n');
         paragraph++;
         pendingBreak = false;
-      } else if (buf.isNotEmpty && !t.glued) {
-        buf.write(' ');
+      } else if (length > 0 && !t.glued) {
+        add(' ');
       }
-      final start = buf.length;
-      buf.write(t.text);
-      ranges[i] = (start, buf.length);
+      final start = length;
+      add(t.text, styleOf(t));
+      ranges[i] = (start, length);
       paragraphOf[i] = paragraph;
     }
 
     // minLevel pins the paragraph to the full width; otherwise it shrinks to
     // its text and RTL lines would hug the left edge.
-    final para = _painter(buf.toString())
+    final para = _painter(TextSpan(style: _style, children: spans))
       ..layout(minWidth: maxWidth, maxWidth: maxWidth);
     final offsets = List<Offset?>.filled(tokens.length, null);
     for (var i = 0; i < tokens.length; i++) {
@@ -120,7 +160,7 @@ class LeveledTextLayout {
       offsets[i] = Offset(box.left, box.top + paragraphOf[i] * paragraphGap);
     }
 
-    final height = buf.isEmpty ? 0.0 : para.height + paragraph * paragraphGap;
+    final height = length == 0 ? 0.0 : para.height + paragraph * paragraphGap;
     para.dispose();
     return LevelLayout(offsets, height);
   }
@@ -129,6 +169,9 @@ class LeveledTextLayout {
   void dispose() {
     for (final p in painters) {
       p.dispose();
+    }
+    for (final p in linkGapPainters) {
+      p?.dispose();
     }
   }
 }
