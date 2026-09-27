@@ -34,7 +34,11 @@ class LeveledTextLayout {
     this.paragraphGap = 6,
   })  : _style = style,
         _textScaler = textScaler,
-        _textDirection = textDirection {
+        _textDirection = textDirection,
+        rewrittenLevels = {
+          for (final t in text.tokens)
+            if (t.maxLevel != null) t.maxLevel! + 1,
+        } {
     painters = [
       for (final t in text.tokens) _painter(t.isBreak ? '' : t.text)..layout(),
     ];
@@ -45,6 +49,10 @@ class LeveledTextLayout {
 
   /// Extra space between paragraphs.
   final double paragraphGap;
+
+  /// Levels at which some words are replaced rather than only added. The
+  /// view staggers the cross-fade there so old and new words don't overlap.
+  final Set<int> rewrittenLevels;
 
   final TextStyle _style;
   final TextScaler _textScaler;

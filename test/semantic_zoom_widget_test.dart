@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:semantic_zoom/semantic_zoom.dart';
 
@@ -15,9 +15,14 @@ final _text = LeveledText.parse(
 );
 
 class _Harness extends StatefulWidget {
-  const _Harness({required this.onController, this.itemCount = 40});
+  const _Harness({
+    required this.onController,
+    this.itemCount = 40,
+    this.itemBuilder,
+  });
   final ValueChanged<SemanticZoomController> onController;
   final int itemCount;
+  final Widget Function(int index)? itemBuilder;
 
   @override
   State<_Harness> createState() => _HarnessState();
@@ -56,7 +61,8 @@ class _HarnessState extends State<_Harness>
               itemBuilder: (context, i) => Padding(
                 key: ValueKey('item-$i'),
                 padding: const EdgeInsets.only(bottom: 16),
-                child: LeveledTextView(_text, itemId: i),
+                child: widget.itemBuilder?.call(i) ??
+                    LeveledTextView(_text, itemId: i),
               ),
             ),
           ),
@@ -335,6 +341,90 @@ void main() {
     await press(LogicalKeyboardKey.minus);
     expect(controller.level, 1);
     await press(LogicalKeyboardKey.digit0);
+    expect(controller.level, 0);
+  });
+
+  testWidgets('a pinch cancels taps on the items underneath', (tester) async {
+    tester.view.physicalSize = const Size(400, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var taps = 0;
+    await tester.pumpWidget(
+      _Harness(
+        onController: (c) => controller = c,
+        itemBuilder: (i) => GestureDetector(
+          onTap: () => taps++,
+          child: LeveledTextView(_text, itemId: i),
+        ),
+      ),
+    );
+
+    // A small pinch that stays within tap slop must not become a tap.
+    // Each finger lands on a different tappable item.
+    final a = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('item-0'))),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    final b = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('item-1'))),
+    );
+    await a.moveBy(const Offset(0, -4));
+    await b.moveBy(const Offset(0, 4));
+    await a.up();
+    await b.up();
+    await tester.pumpAndSettle();
+    expect(taps, 0, reason: 'pinch produced a tap');
+
+    // A single-finger tap still works.
+    await tester.tap(find.byKey(const ValueKey('item-0')));
+    await tester.pumpAndSettle();
+    expect(taps, 1);
+  });
+
+  testWidgets('a pinch cancels ink highlights on the items underneath',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final highlighted = <int>{};
+    await tester.pumpWidget(
+      _Harness(
+        onController: (c) => controller = c,
+        itemBuilder: (i) => Material(
+          child: InkWell(
+            onTap: () {},
+            onHighlightChanged: (on) {
+              if (on) highlighted.add(i);
+            },
+            child: LeveledTextView(_text, itemId: i),
+          ),
+        ),
+      ),
+    );
+
+    final a = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('item-0'))),
+    );
+    await tester.pump(const Duration(milliseconds: 30));
+    final b = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('item-1'))),
+    );
+    for (var i = 0; i < 20; i++) {
+      await a.moveBy(const Offset(0, -2));
+      await b.moveBy(const Offset(0, 2));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await a.up();
+    await b.up();
+    await tester.pumpAndSettle();
+    expect(highlighted, isEmpty);
+  });
+
+  testWidgets('single-finger scrolling still works', (tester) async {
+    final scroll = await pump(tester);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(scroll.offset, greaterThan(250));
     expect(controller.level, 0);
   });
 }

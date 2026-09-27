@@ -78,6 +78,21 @@ void main() {
     expect(l.layoutFor(1, 1000).offsets[cc]!.dx, 30);
   });
 
+  test('knows which levels rewrite words', () {
+    LeveledTextLayout make(LeveledText t) => LeveledTextLayout(
+          t,
+          style: _style,
+          textScaler: TextScaler.noScaling,
+          textDirection: TextDirection.ltr,
+        );
+    expect(
+      make(LeveledText.fromVersions(const ['a b', 'a b c', 'a x c']))
+          .rewrittenLevels,
+      {2},
+    );
+    expect(make(LeveledText.parse('a [b] {c}')).rewrittenLevels, isEmpty);
+  });
+
   test('caches per level and width', () {
     final l = _layout('aa [bb]');
     expect(identical(l.layoutFor(1, 100), l.layoutFor(1, 100)), isTrue);

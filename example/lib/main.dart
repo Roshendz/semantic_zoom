@@ -328,7 +328,7 @@ class _HealthDemoState extends State<HealthDemo>
       children: [
         const _SectionTitle(
           title: 'Patient timeline',
-          subtitle: 'Visit title → summary → clinician notes',
+          subtitle: 'Visit title › summary › clinician notes',
         ),
         Expanded(
           child: SemanticZoomListView.builder(
@@ -591,6 +591,10 @@ class _LevelSelector extends StatelessWidget {
     child: ListenableBuilder(
       listenable: controller,
       builder: (context, _) => SegmentedButton<int>(
+        // Full width, and no check icon, so labels never wrap and the row
+        // doesn't change size as the level changes.
+        expandedInsets: EdgeInsets.zero,
+        showSelectedIcon: false,
         segments: [
           for (var i = 0; i < labels.length; i++)
             ButtonSegment(value: i, label: Text(labels[i])),

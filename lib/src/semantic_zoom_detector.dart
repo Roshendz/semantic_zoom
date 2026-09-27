@@ -271,7 +271,16 @@ class _SemanticZoomDetectorState extends State<SemanticZoomDetector> {
       onPointerPanZoomUpdate: _onPanZoomUpdate,
       onPointerPanZoomEnd: _onPanZoomEnd,
       onPointerSignal: _onSignal,
-      child: widget.builder(context, _pinching),
+      child: RawGestureDetector(
+        gestures: {
+          _PinchArenaClaim:
+              GestureRecognizerFactoryWithHandlers<_PinchArenaClaim>(
+            () => _PinchArenaClaim(debugOwner: this),
+            (_) {},
+          ),
+        },
+        child: widget.builder(context, _pinching),
+      ),
     );
     if (widget.enableKeyboardShortcuts) {
       child = CallbackShortcuts(
@@ -281,4 +290,54 @@ class _SemanticZoomDetectorState extends State<SemanticZoomDetector> {
     }
     return SemanticZoomScope(controller: _c, child: child);
   }
+}
+
+/// Joins the gesture arena for every touch and wins it as soon as a second
+/// finger lands, so taps, ink highlights and long presses under a pinch are
+/// cancelled. With a single finger it stays out of the way: it withdraws on
+/// pointer up, and a scroll or tap recognizer that claims first wins.
+///
+/// The pinch itself is still read by the [Listener], because a scrollable's
+/// drag recognizer may already have won the first finger's arena.
+class _PinchArenaClaim extends OneSequenceGestureRecognizer {
+  _PinchArenaClaim({super.debugOwner})
+      : super(
+          supportedDevices: const {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.stylus,
+          },
+        );
+
+  final _down = <int>{};
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    _down.add(event.pointer);
+    if (_down.length >= 2) resolve(GestureDisposition.accepted);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerUpEvent || event is PointerCancelEvent) {
+      // A lone finger lifting is a tap or the end of a scroll; step aside
+      // before the arena is swept so the item underneath gets it.
+      if (_down.length < 2) resolve(GestureDisposition.rejected);
+      _down.remove(event.pointer);
+      stopTrackingPointer(event.pointer);
+    }
+  }
+
+  @override
+  void rejectGesture(int pointer) {
+    super.rejectGesture(pointer);
+    _down.remove(pointer);
+    stopTrackingPointer(pointer);
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) => _down.clear();
+
+  @override
+  String get debugDescription => 'semantic zoom pinch';
 }

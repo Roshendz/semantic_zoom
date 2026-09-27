@@ -6,6 +6,9 @@ version: 0.1.0
 homepage: https://roshendz.github.io/semantic_zoom/
 repository: https://github.com/Roshendz/semantic_zoom
 issue_tracker: https://github.com/Roshendz/semantic_zoom/issues
+screenshots:
+  - description: Pinching a travel journal from highlights to full entries, then tapping one day
+    path: doc/demo.gif
 topics:
   - text
   - animation

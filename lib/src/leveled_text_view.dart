@@ -234,14 +234,20 @@ class _MorphPainter extends CustomPainter {
   }
 
   // A token shown from level L fades in over z in (L-1, L]; one dropped
-  // after level M fades out over z in [M, M+1). With the default curve the
-  // fade-in starts late and the fade-out finishes early, so old and new
-  // words don't pile up on top of each other.
+  // after level M fades out over z in [M, M+1). Dropped words leave early,
+  // and on levels that replace words the new ones arrive late, so the two
+  // never overlap. Pure additions use [fade].
+  static const _fadeOut = Interval(0, 0.4, curve: Curves.easeOut);
+  static const _lateFadeIn = Interval(0.45, 1);
+
   double _opacity(LeveledToken t) {
-    final fadeIn = fade.transform((z - t.minLevel + 1).clamp(0.0, 1.0));
+    final tIn = (z - t.minLevel + 1).clamp(0.0, 1.0);
+    final fadeIn = l.rewrittenLevels.contains(t.minLevel)
+        ? _lateFadeIn.transform(tIn)
+        : fade.transform(tIn);
     final max = t.maxLevel;
     if (max == null) return fadeIn;
-    final fadeOut = fade.transform((max + 1 - z).clamp(0.0, 1.0));
+    final fadeOut = 1 - _fadeOut.transform((z - max).clamp(0.0, 1.0));
     return fadeIn < fadeOut ? fadeIn : fadeOut;
   }
 

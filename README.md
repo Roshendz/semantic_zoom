@@ -12,8 +12,7 @@ never changes. Words already on screen slide to their new spots and new
 words fade in around them. The entry under your fingers stays exactly where
 it is.
 
-<!-- Record the example app and save it as doc/demo.gif -->
-<p align="center"><img src="https://raw.githubusercontent.com/Roshendz/semantic_zoom/main/doc/demo.gif" width="320" alt="Pinching a journal list from brief titles to full paragraphs"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/Roshendz/semantic_zoom/main/doc/demo.gif" width="320" alt="Pinching a travel journal from highlights to full entries, then tapping one day"></p>
 
 **[Try the live demo →](https://roshendz.github.io/semantic_zoom/)** (trackpad pinch, ctrl + scroll, or Ctrl/⌘ + / − on desktop)
 
@@ -55,7 +54,8 @@ It suits anything with summaries and details:
   one frame.
 - 🤏 **Every input.** Touch pinch, trackpad pinch (macOS, Windows, web),
   ctrl + scroll wheel on the web, and Ctrl/⌘ `+` `−` `0` on a keyboard.
-  Two-finger trackpad scrolling still scrolls.
+  Two-finger trackpad scrolling still scrolls, and a pinch never triggers
+  taps or ripples on the entries under your fingers.
 - ♿ **Accessible.** Each entry is an *adjustable* control for VoiceOver and
   TalkBack (swipe up/down to change detail) with named levels. Screen readers
   read the text at the current level, and the reduce-motion setting skips

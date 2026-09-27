@@ -13,7 +13,8 @@
   settle, reduce-motion support, and per-item levels (`setItemLevel`,
   `itemLevel`, `clearItemLevels`).
 * `SemanticZoomDetector`: touch pinch, trackpad pinch, web ctrl+wheel, and
-  Ctrl/⌘ `+` `−` `0` keyboard shortcuts.
+  Ctrl/⌘ `+` `−` `0` keyboard shortcuts. A pinch cancels taps, ink
+  highlights and long presses on the items under the fingers.
 * `SliverSemanticZoomList`: scroll anchoring applied during layout (no
   one-frame lag).
 * `SemanticZoomListView.builder` for one-widget setup.
