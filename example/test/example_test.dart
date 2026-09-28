@@ -48,4 +48,16 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('the chosen level survives an OS restart', (tester) async {
+    await tester.pumpWidget(const ExampleApp());
+    await tester.tap(find.text('Full'));
+    await tester.pumpAndSettle();
+    await tester.restartAndRestore();
+    await tester.pump();
+    final selected = tester
+        .widget<SegmentedButton<int>>(find.byType(SegmentedButton<int>).first)
+        .selected;
+    expect(selected, {2});
+  });
 }

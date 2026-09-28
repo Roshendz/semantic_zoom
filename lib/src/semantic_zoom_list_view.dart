@@ -19,6 +19,7 @@ class SemanticZoomListView extends StatelessWidget {
     this.scrollController,
     this.physics,
     this.reverse = false,
+    this.restorationId,
     this.levelsPerDoubling = 1.6,
     this.enableHaptics = true,
     this.enableKeyboardShortcuts = true,
@@ -47,6 +48,11 @@ class SemanticZoomListView extends StatelessWidget {
   /// message under the fingers (or the newest visible one) still.
   final bool reverse;
 
+  /// Restores the level, item levels and scroll position after the
+  /// operating system restarts the app in the background. See
+  /// [SemanticZoomDetector.restorationId]. Null (the default) disables it.
+  final String? restorationId;
+
   /// See [SemanticZoomDetector.levelsPerDoubling].
   final double levelsPerDoubling;
 
@@ -62,6 +68,7 @@ class SemanticZoomListView extends StatelessWidget {
         levelsPerDoubling: levelsPerDoubling,
         enableHaptics: enableHaptics,
         enableKeyboardShortcuts: enableKeyboardShortcuts,
+        restorationId: restorationId,
         builder: (context, isPinching) {
           Widget sliver = SliverSemanticZoomList.builder(
             controller: controller,
@@ -74,6 +81,8 @@ class SemanticZoomListView extends StatelessWidget {
           return CustomScrollView(
             controller: scrollController,
             reverse: reverse,
+            restorationId:
+                restorationId == null ? null : '$restorationId.scroll',
             physics:
                 isPinching ? const NeverScrollableScrollPhysics() : physics,
             slivers: [sliver],

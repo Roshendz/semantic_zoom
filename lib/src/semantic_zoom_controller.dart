@@ -171,6 +171,34 @@ class SemanticZoomController extends ChangeNotifier {
   void jumpToLevel(int target) =>
       animateToLevel(target, animate: false, anchor: false);
 
+  /// Sets the level immediately, without animating or anchoring. Meant for
+  /// restoring saved state while the list is first built (the widgets'
+  /// `restorationId` uses it); use [jumpToLevel] otherwise.
+  ///
+  /// Listeners are notified after the current frame, because notifying
+  /// widgets elsewhere in the tree during a build isn't allowed.
+  void restoreLevel(int level) {
+    _zoom.stop();
+    final target = level.clamp(0, maxLevel);
+    final changed = target != _level;
+    _level = target;
+    _zoom.value = target.toDouble();
+    if (changed) _notifyAfterFrame();
+  }
+
+  bool _notifyScheduled = false;
+  bool _disposed = false;
+
+  void _notifyAfterFrame() {
+    if (_notifyScheduled) return;
+    _notifyScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _notifyScheduled = false;
+      if (!_disposed) notifyListeners();
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
+
   /// Starts a gesture at [focalPoint]: stops settling, anchors there and
   /// returns every item to the global level.
   void beginGesture(Offset focalPoint) {
@@ -221,6 +249,28 @@ class SemanticZoomController extends ChangeNotifier {
 
   /// Whether any item has a level different from the global [level].
   bool get hasItemLevels => _items.values.any((i) => i.target != 0);
+
+  /// Items whose level differs from the global [level], by item id.
+  Map<Object, int> get itemLevels => Map.unmodifiable({
+        for (final MapEntry(key: id, value: item) in _items.entries)
+          if (item.target != 0) id: itemLevel(id),
+      });
+
+  /// Sets item levels immediately, without animating. The counterpart of
+  /// [restoreLevel] for [itemLevels]; listeners are notified after the
+  /// current frame.
+  void restoreItemLevels(Map<Object, int> levels) {
+    if (levels.isNotEmpty) _notifyAfterFrame();
+    for (final MapEntry(key: id, value: level) in levels.entries) {
+      final item = _item(id);
+      final target = (level.clamp(0, maxLevel) - _level).toDouble();
+      item
+        ..sim = null
+        ..target = target
+        ..offset = target
+        ..notifyListeners();
+    }
+  }
 
   /// Moves only item [id] to [target], e.g. on tap. Other items keep the
   /// global level. The next pinch or [animateToLevel] clears it.
@@ -306,6 +356,7 @@ class SemanticZoomController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _zoom.dispose();
     _itemTicker?.dispose();
     for (final item in _items.values) {

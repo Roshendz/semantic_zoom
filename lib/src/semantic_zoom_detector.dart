@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -40,6 +41,7 @@ class SemanticZoomDetector extends StatefulWidget {
     this.flingProjection = const Duration(milliseconds: 120),
     this.enableHaptics = true,
     this.enableKeyboardShortcuts = true,
+    this.restorationId,
   });
 
   /// The controller to drive.
@@ -65,11 +67,19 @@ class SemanticZoomDetector extends StatefulWidget {
   /// Whether Ctrl/⌘ `+`, `-` and `0` change the level.
   final bool enableKeyboardShortcuts;
 
+  /// Restores [controller]'s level after the operating system restarts the
+  /// app in the background (Flutter state restoration). Item levels are
+  /// restored too for `int` and `String` item ids. Requires a
+  /// `restorationScopeId` on the app, e.g. `MaterialApp`. Null (the
+  /// default) disables it.
+  final String? restorationId;
+
   @override
   State<SemanticZoomDetector> createState() => _SemanticZoomDetectorState();
 }
 
-class _SemanticZoomDetectorState extends State<SemanticZoomDetector> {
+class _SemanticZoomDetectorState extends State<SemanticZoomDetector>
+    with RestorationMixin {
   static const _panZoomStartThreshold = 0.03; // log2 scale before we engage
   static const _signalSettleDelay = Duration(milliseconds: 160);
 
@@ -97,12 +107,60 @@ class _SemanticZoomDetectorState extends State<SemanticZoomDetector> {
   void didUpdateWidget(SemanticZoomDetector old) {
     super.didUpdateWidget(old);
     if (old.controller != widget.controller) {
+      old.controller.removeListener(_save);
+      _c.addListener(_save);
       _c.reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+      _save();
     }
   }
 
+  // ── restoration ──
+
+  final _savedLevel = RestorableIntN(null);
+  final _savedItems = RestorableStringN(null);
+
+  @override
+  String? get restorationId => widget.restorationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _c.addListener(_save);
+  }
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    registerForRestoration(_savedLevel, 'level');
+    registerForRestoration(_savedItems, 'items');
+    final level = _savedLevel.value;
+    if (level != null) _c.restoreLevel(level);
+    final items = _savedItems.value;
+    if (items != null) _c.restoreItemLevels(_decodeItems(items));
+  }
+
+  void _save() {
+    if (bucket == null) return;
+    _savedLevel.value = _c.level;
+    final items = _c.itemLevels;
+    _savedItems.value = items.isEmpty ? null : _encodeItems(items);
+  }
+
+  // Only ints and strings survive a round trip; other ids are skipped.
+  static String _encodeItems(Map<Object, int> items) => jsonEncode([
+        for (final MapEntry(key: id, value: level) in items.entries)
+          if (id is int || id is String) [id, level],
+      ]);
+
+  static Map<Object, int> _decodeItems(String json) => {
+        for (final entry in jsonDecode(json) as List<Object?>)
+          (entry! as List<Object?>)[0]!: (entry as List<Object?>)[1]! as int,
+      };
+
   @override
   void dispose() {
+    _c.removeListener(_save);
+    _savedLevel.dispose();
+    _savedItems.dispose();
     _signalTimer?.cancel();
     _focus.dispose();
     super.dispose();

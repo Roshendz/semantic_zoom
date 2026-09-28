@@ -8,6 +8,9 @@ class ExampleApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+    // Lets each list below keep its level (and scroll position) when the
+    // OS restarts the app in the background.
+    restorationScopeId: 'app',
     title: 'semantic_zoom',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(colorSchemeSeed: const Color(0xFF1E6F8C)),
@@ -151,6 +154,7 @@ class _TravelDemoState extends State<TravelDemo>
         Expanded(
           child: SemanticZoomDetector(
             controller: _zoom,
+            restorationId: 'travel',
             builder: (context, isPinching) => CustomScrollView(
               physics: isPinching
                   ? const NeverScrollableScrollPhysics()
@@ -344,6 +348,7 @@ class _HealthDemoState extends State<HealthDemo>
         Expanded(
           child: SemanticZoomListView.builder(
             controller: _zoom,
+            restorationId: 'health',
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             itemCount: _visits.length,
             itemBuilder: (context, i) {
@@ -468,6 +473,7 @@ class _InboxDemoState extends State<InboxDemo>
         Expanded(
           child: SemanticZoomListView.builder(
             controller: _zoom,
+            restorationId: 'inbox',
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
             itemCount: _threads.length,
             itemBuilder: (context, i) {
@@ -636,6 +642,7 @@ class _ChatDemoState extends State<ChatDemo>
         Expanded(
           child: SemanticZoomListView.builder(
             controller: _zoom,
+            restorationId: 'chat',
             reverse: true,
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             itemCount: _messages.length,
@@ -783,6 +790,8 @@ class ReadsDemo extends StatelessWidget {
                       const SizedBox(height: 8),
                       ExpandableLeveledText(
                         text,
+                        // Keeps the card open after scrolling away and back.
+                        key: PageStorageKey('read-$i'),
                         style: theme.textTheme.bodyLarge?.copyWith(height: 1.4),
                         linkStyle: _linkStyle(context),
                         onLinkTap: (url) => _openLink(context, url),

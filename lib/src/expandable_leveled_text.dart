@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'leveled_text.dart';
@@ -43,6 +45,7 @@ class ExpandableLeveledText extends StatefulWidget {
     this.levelLabels,
     this.showMoreHint = 'Show more',
     this.showLessHint = 'Show less',
+    this.restorationId,
   });
 
   /// The text to display.
@@ -86,6 +89,14 @@ class ExpandableLeveledText extends StatefulWidget {
   /// Screen-reader hint for the tap action at the last level.
   final String showLessHint;
 
+  /// Restores the level after the operating system restarts the app in the
+  /// background (Flutter state restoration). Requires a
+  /// `restorationScopeId` on the app. Null (the default) disables it.
+  ///
+  /// To keep the level when the text scrolls out of a list and back, give
+  /// it a [PageStorageKey] instead, e.g. `key: PageStorageKey(article.id)`.
+  final String? restorationId;
+
   @override
   State<ExpandableLeveledText> createState() => ExpandableLeveledTextState();
 }
@@ -93,7 +104,7 @@ class ExpandableLeveledText extends StatefulWidget {
 /// State of an [ExpandableLeveledText]; reach it with a [GlobalKey] to
 /// change the level from outside.
 class ExpandableLeveledTextState extends State<ExpandableLeveledText>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, RestorationMixin {
   late SemanticZoomController _zoom;
 
   int get _levelCount {
@@ -113,15 +124,58 @@ class ExpandableLeveledTextState extends State<ExpandableLeveledText>
   @override
   void initState() {
     super.initState();
-    _zoom = _create(widget.initialLevel);
+    final stored = _storageId == null
+        ? null
+        : PageStorage.maybeOf(context)?.readState(
+            context,
+            identifier: _storageId,
+          );
+    _zoom = _create(stored is int ? stored : widget.initialLevel);
   }
 
-  SemanticZoomController _create(int initial) => SemanticZoomController(
-        vsync: this,
-        levelCount: _levelCount,
-        initialLevel: initial,
-        levelLabels: widget.levelLabels,
-      )..addListener(_changed);
+  final _savedLevel = RestorableIntN(null);
+
+  @override
+  String? get restorationId => widget.restorationId;
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    registerForRestoration(_savedLevel, 'level');
+    final level = _savedLevel.value;
+    if (level != null) _zoom.restoreLevel(level);
+  }
+
+  /// Where the level is kept in [PageStorage], or null when this widget has
+  /// no [PageStorageKey] of its own. Ancestor keys are included so equal
+  /// keys in different lists don't collide, but an ancestor key alone is
+  /// never enough: that would make every text under it share one level.
+  Object? get _storageId {
+    final key = widget.key;
+    if (key is! PageStorageKey) return null;
+    final keys = <Key>[key];
+    context.visitAncestorElements((element) {
+      final k = element.widget.key;
+      if (k is PageStorageKey) keys.add(k);
+      return element.widget is! PageStorage;
+    });
+    return _StorageId(keys);
+  }
+
+  // SingleTickerProviderStateMixin may create only one ticker. The first
+  // controller uses it; controllers replaced later (new level count or
+  // labels) get theirs from [_PlainTickers].
+  bool _usedOwnTicker = false;
+
+  SemanticZoomController _create(int initial) {
+    final TickerProvider vsync = _usedOwnTicker ? const _PlainTickers() : this;
+    _usedOwnTicker = true;
+    return SemanticZoomController(
+      vsync: vsync,
+      levelCount: _levelCount,
+      initialLevel: initial,
+      levelLabels: widget.levelLabels,
+    )..addListener(_changed);
+  }
 
   @override
   void didChangeDependencies() {
@@ -133,7 +187,7 @@ class ExpandableLeveledTextState extends State<ExpandableLeveledText>
   void didUpdateWidget(ExpandableLeveledText oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_zoom.levelCount != _levelCount ||
-        oldWidget.levelLabels != widget.levelLabels) {
+        !listEquals(oldWidget.levelLabels, widget.levelLabels)) {
       final keep = _zoom.level;
       _zoom.dispose();
       _zoom = _create(keep)
@@ -143,6 +197,15 @@ class ExpandableLeveledTextState extends State<ExpandableLeveledText>
 
   void _changed() {
     widget.onLevelChanged?.call(_zoom.level);
+    if (bucket != null) _savedLevel.value = _zoom.level;
+    final id = _storageId;
+    if (id != null) {
+      PageStorage.maybeOf(context)?.writeState(
+        context,
+        _zoom.level,
+        identifier: id,
+      );
+    }
     setState(() {});
   }
 
@@ -167,6 +230,7 @@ class ExpandableLeveledTextState extends State<ExpandableLeveledText>
   @override
   void dispose() {
     _zoom.dispose();
+    _savedLevel.dispose();
     super.dispose();
   }
 
@@ -198,4 +262,29 @@ class ExpandableLeveledTextState extends State<ExpandableLeveledText>
       children: [view, footer(context, level, maxLevel, next)],
     );
   }
+}
+
+@immutable
+class _StorageId {
+  const _StorageId(this.keys);
+  final List<Key> keys;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _StorageId && listEquals(other.keys, keys);
+
+  @override
+  int get hashCode => Object.hashAll(keys);
+}
+
+/// Tickers for controllers created after the first. Unlike the State's own
+/// ticker they aren't paused by [TickerMode]; they only run for the short
+/// settle animation after a tap. (TickerMode's listening API differs
+/// between the oldest and newest supported Flutter versions.)
+class _PlainTickers implements TickerProvider {
+  const _PlainTickers();
+
+  @override
+  Ticker createTicker(TickerCallback onTick) =>
+      Ticker(onTick, debugLabel: 'ExpandableLeveledText');
 }
