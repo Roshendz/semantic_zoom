@@ -18,6 +18,7 @@ class SemanticZoomListView extends StatelessWidget {
     this.padding,
     this.scrollController,
     this.physics,
+    this.reverse = false,
     this.levelsPerDoubling = 1.6,
     this.enableHaptics = true,
     this.enableKeyboardShortcuts = true,
@@ -40,6 +41,11 @@ class SemanticZoomListView extends StatelessWidget {
 
   /// Physics used when not pinching. Defaults to the platform's.
   final ScrollPhysics? physics;
+
+  /// Whether the list starts at the bottom, like a chat: item 0 is drawn
+  /// last and the list scrolls up for older items. Anchoring keeps the
+  /// message under the fingers (or the newest visible one) still.
+  final bool reverse;
 
   /// See [SemanticZoomDetector.levelsPerDoubling].
   final double levelsPerDoubling;
@@ -67,6 +73,7 @@ class SemanticZoomListView extends StatelessWidget {
           }
           return CustomScrollView(
             controller: scrollController,
+            reverse: reverse,
             physics:
                 isPinching ? const NeverScrollableScrollPhysics() : physics,
             slivers: [sliver],

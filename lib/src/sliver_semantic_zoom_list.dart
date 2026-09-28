@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
@@ -57,7 +58,8 @@ class SliverSemanticZoomList extends SliverMultiBoxAdaptorWidget {
 
 /// Render object for [SliverSemanticZoomList].
 ///
-/// Supports [AxisDirection.down] and [AxisDirection.right].
+/// Supports [AxisDirection.down], [AxisDirection.right] and, for chat-style
+/// lists (`reverse: true`), [AxisDirection.up].
 class RenderSliverSemanticZoomList extends RenderSliverList
     implements SemanticZoomAnchorClient {
   /// Creates the render object.
@@ -98,7 +100,9 @@ class RenderSliverSemanticZoomList extends RenderSliverList
   }
 
   bool get _supported => switch (constraints.axisDirection) {
-        AxisDirection.down || AxisDirection.right => true,
+        // All offsets here are measured from the viewport's leading edge,
+        // which is the bottom in a reversed list, so the same math applies.
+        AxisDirection.down || AxisDirection.right || AxisDirection.up => true,
         _ => false,
       };
 
@@ -174,6 +178,20 @@ class RenderSliverSemanticZoomList extends RenderSliverList
   @override
   void performLayout() {
     super.performLayout();
+    if (_anchorIndex == null &&
+        geometry!.scrollOffsetCorrection != null &&
+        constraints.scrollOffset <= precisionErrorTolerance &&
+        firstChild != null) {
+      // The list was moved to exactly its start (e.g. jumpTo(0) or the end
+      // of animateTo(0)), but items above the old position changed height
+      // while off-screen. SliverList would fix its estimate one item at a
+      // time by shifting the scroll offset, so the start would be missed.
+      // Lay out again from item 0 instead, so the start is really shown.
+      // While scrolling normally the estimates are already fixed by the
+      // time the start is reached, so this doesn't run then.
+      collectGarbage(childCount, 0);
+      super.performLayout();
+    }
     final index = _anchorIndex;
     if (index == null || !_supported) return;
     if (geometry!.scrollOffsetCorrection != null) return;

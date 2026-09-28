@@ -38,7 +38,8 @@ jobs:
         run: dart format --output=none --set-exit-if-changed lib test example/lib
       - if: matrix.flutter == 'pinned'
         run: flutter analyze --fatal-infos
-      - run: flutter test
+      # Golden images are recorded on macOS; font rasterising differs on Linux.
+      - run: flutter test --exclude-tags golden
       - if: matrix.flutter == 'pinned'
         working-directory: example
         run: flutter test

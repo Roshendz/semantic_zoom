@@ -29,6 +29,14 @@ void main() {
     await tester.tap(find.text('Subject'));
     await tester.pumpAndSettle();
 
+    // Chat: reversed list; the newest message sits at the bottom.
+    await tester.tap(find.byIcon(Icons.forum));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Full'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gist'));
+    await tester.pumpAndSettle();
+
     // Reads: one expandable card, no controller.
     await tester.tap(find.byIcon(Icons.article));
     await tester.pumpAndSettle();

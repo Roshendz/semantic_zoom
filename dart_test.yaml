@@ -1,0 +1,3 @@
+tags:
+  golden:
+    description: Pixel baselines; run locally, skipped on CI.

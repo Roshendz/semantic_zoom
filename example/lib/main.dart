@@ -34,7 +34,13 @@ class _HomeState extends State<_Home> {
     body: SafeArea(
       child: IndexedStack(
         index: _tab,
-        children: const [TravelDemo(), HealthDemo(), InboxDemo(), ReadsDemo()],
+        children: const [
+          TravelDemo(),
+          HealthDemo(),
+          InboxDemo(),
+          ChatDemo(),
+          ReadsDemo(),
+        ],
       ),
     ),
     bottomNavigationBar: NavigationBar(
@@ -44,6 +50,7 @@ class _HomeState extends State<_Home> {
         NavigationDestination(icon: Icon(Icons.map), label: 'Travel'),
         NavigationDestination(icon: Icon(Icons.monitor_heart), label: 'Health'),
         NavigationDestination(icon: Icon(Icons.inbox), label: 'Inbox'),
+        NavigationDestination(icon: Icon(Icons.forum), label: 'Chat'),
         NavigationDestination(icon: Icon(Icons.article), label: 'Reads'),
       ],
     ),
@@ -519,6 +526,175 @@ class _InboxDemoState extends State<InboxDemo>
         _LevelSelector(
           controller: _zoom,
           labels: const ['Subject', 'Short', 'Detailed'],
+        ),
+      ],
+    );
+  }
+}
+
+// ──────────── Chat: reversed list, newest message at the bottom ────────────
+//
+// Long messages collapse to a one-line gist. Pinch to open every message,
+// or tap one. The message under your fingers stays put, even though the
+// list grows upwards from the bottom.
+
+final _messages = <(bool, String, LeveledText)>[
+  // Newest first: index 0 is drawn at the bottom of a reversed list.
+  (
+    true,
+    '10:42',
+    LeveledText.fromVersions(const [
+      'Sounds good, see you Thursday',
+      'Sounds good, see you Thursday at the station',
+    ]),
+  ),
+  (
+    false,
+    '10:40',
+    LeveledText.parse(
+      'Train tickets booked[ for Thursday, 8:05 from Lisbon]'
+      '{. Seats 42 and 43, coach 5, window on the left. The return is open, '
+      'so we can stay an extra night in Porto if the weather holds.}',
+    ),
+  ),
+  (
+    true,
+    '10:31',
+    LeveledText.parse(
+      'Can you book the train?[ I can do the hotel]'
+      '{. I found a small place near the river with a terrace, and it has '
+      'free cancellation until Tuesday.}',
+    ),
+  ),
+  (
+    false,
+    '10:28',
+    LeveledText.parse(
+      'Weather looks good[ for Porto on Thursday and Friday]'
+      '{: 24 degrees and sunny, with a chance of rain on Saturday '
+      'morning. Worth packing a light jacket for the evenings.}',
+    ),
+  ),
+  (
+    true,
+    '10:15',
+    LeveledText.parse(
+      'Plan for the trip?[ Thinking two nights in Porto]'
+      '{. We could do a port tasting in Gaia, walk along the river, and '
+      'visit **Livraria Lello** early before the queue.}',
+    ),
+  ),
+  (
+    false,
+    '10:02',
+    LeveledText.parse(
+      'Back from Sintra[, the fog cleared by noon]'
+      '{. Pena Palace was worth it, and we took the forest path back '
+      'down. My legs will remember this tomorrow.}',
+    ),
+  ),
+  (
+    true,
+    '09:48',
+    LeveledText.parse(
+      'Morning![ How was Sintra?]'
+      '{ I saw the photos, the view from the palace looked unreal.}',
+    ),
+  ),
+];
+
+class ChatDemo extends StatefulWidget {
+  const ChatDemo({super.key});
+
+  @override
+  State<ChatDemo> createState() => _ChatDemoState();
+}
+
+class _ChatDemoState extends State<ChatDemo>
+    with SingleTickerProviderStateMixin {
+  late final _zoom = SemanticZoomController(
+    vsync: this,
+    levelCount: 3,
+    levelLabels: const ['Gist', 'Short', 'Full message'],
+  );
+
+  @override
+  void dispose() {
+    _zoom.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        const _SectionTitle(
+          title: 'Chat with Ana',
+          subtitle: 'Newest at the bottom. Pinch, or tap one message.',
+        ),
+        Expanded(
+          child: SemanticZoomListView.builder(
+            controller: _zoom,
+            reverse: true,
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            itemCount: _messages.length,
+            itemBuilder: (context, i) {
+              final (mine, time, text) = _messages[i];
+              final bubble = mine
+                  ? scheme.primaryContainer
+                  : scheme.surfaceContainerHigh;
+              final ink = mine ? scheme.onPrimaryContainer : scheme.onSurface;
+              return Align(
+                alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 290),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Material(
+                      color: bubble,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(18),
+                        topRight: const Radius.circular(18),
+                        bottomLeft: Radius.circular(mine ? 18 : 4),
+                        bottomRight: Radius.circular(mine ? 4 : 18),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _TapToExpand(
+                        controller: _zoom,
+                        itemId: i,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              LeveledTextView(
+                                text,
+                                itemId: i,
+                                style: TextStyle(color: ink, height: 1.35),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                time,
+                                style: TextStyle(
+                                  color: ink.withValues(alpha: 0.6),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        _LevelSelector(
+          controller: _zoom,
+          labels: const ['Gist', 'Short', 'Full'],
         ),
       ],
     );
