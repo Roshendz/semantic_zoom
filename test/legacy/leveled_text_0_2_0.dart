@@ -1,4 +1,7 @@
-import 'package:characters/characters.dart';
+// Exact copy of lib/src/leveled_text.dart as published in 0.2.0, kept as a
+// reference so tests can prove newer versions tokenise text identically.
+// Do not edit.
+// ignore_for_file: public_member_api_docs
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
@@ -284,57 +287,12 @@ class _Raw {
   final String? link;
 
   bool get isBreak => text == '\n';
-  bool get isPunctuation => text
-      .split('')
-      .every((c) => _punctuation.contains(c) || _cjkPunctuation.contains(c));
+  bool get isPunctuation => text.split('').every(_punctuation.contains);
 }
 
 const _punctuation = '.,;:!?…';
 
-// Only used for checkVersions' word counts.
-const _cjkPunctuation = '。、，．！？；：「」『』（）【】〈〉《》…・〜ー';
-
 bool _isSpace(String ch) => ch == ' ' || ch == '\t' || ch == '\r';
-
-/// Scripts written without spaces between words. Each grapheme of these
-/// becomes its own token, so a sentence can morph and wrap per character.
-bool _isUnspaced(int rune) =>
-    (rune >= 0x0E00 && rune <= 0x0EFF) || // Thai, Lao
-    (rune >= 0x1000 && rune <= 0x109F) || // Myanmar
-    (rune >= 0x1780 && rune <= 0x17FF) || // Khmer
-    (rune >= 0x19E0 && rune <= 0x19FF) || // Khmer symbols
-    (rune >= 0x2E80 && rune <= 0x2FDF) || // CJK and Kangxi radicals
-    (rune >= 0x3000 && rune <= 0x30FF) || // CJK punctuation, kana
-    (rune >= 0x3100 && rune <= 0x312F) || // Bopomofo
-    (rune >= 0x31A0 && rune <= 0x31FF) || // Bopomofo ext, kana ext
-    (rune >= 0x3400 && rune <= 0x4DBF) || // CJK ext A
-    (rune >= 0x4E00 && rune <= 0x9FFF) || // CJK unified ideographs
-    (rune >= 0xF900 && rune <= 0xFAFF) || // CJK compatibility
-    (rune >= 0xFF00 && rune <= 0xFFEF) || // full/halfwidth forms
-    (rune >= 0x20000 && rune <= 0x3134F); // CJK ext B-G
-
-/// Splits a space-free word into tokens: one per grapheme of an unspaced
-/// script, with runs of anything else (Latin, digits, emoji) kept whole.
-/// Words without unspaced scripts are returned unchanged.
-List<String> _segment(String word) {
-  if (!word.runes.any(_isUnspaced)) return [word];
-  final parts = <String>[];
-  final run = StringBuffer();
-  for (final g in word.characters) {
-    if (_isUnspaced(g.runes.first)) {
-      if (run.isNotEmpty) {
-        parts.add(run.toString());
-        run.clear();
-      }
-      parts.add(g);
-    } else {
-      run.write(g);
-    }
-  }
-  if (run.isNotEmpty) parts.add(run.toString());
-  return parts;
-}
-
 bool _isWhite(String ch) => _isSpace(ch) || ch == '\n';
 
 /// `[label](url)` starting at [i]: (index of `]`, index after `)`, url).
@@ -378,19 +336,15 @@ List<_Raw> _scan(String src, {required bool levels}) {
 
   void flush() {
     if (buf.isEmpty) return;
-    var first = true;
-    for (final part in _segment(buf.toString())) {
-      out.add(
-        _Raw(
-          part,
-          glued: first ? glued : true,
-          level: level,
-          style: style(),
-          link: link,
-        ),
-      );
-      first = false;
-    }
+    out.add(
+      _Raw(
+        buf.toString(),
+        glued: glued,
+        level: level,
+        style: style(),
+        link: link,
+      ),
+    );
     buf.clear();
   }
 

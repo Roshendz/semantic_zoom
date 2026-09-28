@@ -727,6 +727,23 @@ final _articles = [
     ),
   ),
   (
+    'In Chinese: a day in Porto',
+    // No spaces between words: each character morphs and wraps on its own.
+    LeveledText.parse(
+      '我们坐火车去了**波尔图**[，沿着海岸线一路向北]'
+      '{。下午在河边散步，晚上在一家小餐馆吃了晚饭，窗外的风景非常美丽。}',
+    ),
+  ),
+  (
+    'In Sinhala: the train to Ella',
+    // Sinhala uses spaces between words, so whole words slide and fade.
+    LeveledText.parse(
+      'ඇල්ල දක්වා **දුම්රිය** ගමන[, මහනුවර සිට පැය හයක් පමණ]'
+      '{. කඳුකරයේ තේ වතු, දිය ඇලි සහ මීදුම අතරින් යන මේ ගමන '
+      'ශ්‍රී ලංකාවේ ලස්සනම දුම්රිය ගමනයි.}',
+    ),
+  ),
+  (
     'Accessibility is a feature',
     LeveledText.parse(
       'Screen readers[, larger text] and reduced motion[ are used by more '
