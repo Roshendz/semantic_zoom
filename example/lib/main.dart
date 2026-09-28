@@ -396,48 +396,48 @@ class _HealthDemoState extends State<HealthDemo>
 // Real summaries rarely only add words. fromVersions aligns them anyway:
 // shared words slide, rephrased ones cross-fade.
 
-final _threads = [
+final _threads = <(String, String, List<String>)>[
   (
     'Maya · Design',
     '9:41',
-    LeveledText.fromVersions(const [
+    [
       'Onboarding mockups ready for review',
       'Onboarding mockups from Maya are ready for review by Thursday',
       'Onboarding mockups from Maya are ready for review in Figma. She '
           'prefers option B, which cuts signup to two steps, and needs '
           'feedback by Thursday so engineering can start next sprint.',
-    ]),
+    ],
   ),
   (
     'Leo · Support',
     '9:12',
-    LeveledText.fromVersions(const [
+    [
       'Checkout crash fixed',
       'Android checkout crash is fixed in version 4.2.1',
       'The checkout crash affecting some Android 14 users is fixed in '
           'version 4.2.1, now rolling out to 20% of users. Leo will close the '
           'tickets once the crash rate stays flat for 48 hours.',
-    ]),
+    ],
   ),
   (
     'Finance',
     'Yesterday',
-    LeveledText.fromVersions(const [
+    [
       'Q3 budget approved',
       'Q3 budget approved with a 5% cut to travel',
       'Q3 budget approved with a 5% cut to travel. Trips already booked are '
           'unaffected; new ones need director sign-off from October.',
-    ]),
+    ],
   ),
   (
     'Sam · People team',
     'Mon',
-    LeveledText.fromVersions(const [
+    [
       'Offsite moved to Friday',
       'Team offsite moved to Friday because of the rail strike',
       'Team offsite moved from Thursday to Friday because of the rail '
           'strike. Same venue and agenda; Sam is sending new invites today.',
-    ]),
+    ],
   ),
 ];
 
@@ -455,9 +455,27 @@ class _InboxDemoState extends State<InboxDemo>
     levelLabels: const ['Subjects', 'Short summaries', 'Detailed summaries'],
   );
 
+  // Only the subject line is known up front; the summaries are "generated"
+  // the first time a thread is expanded, and kept for next time.
+  late final _loaders = [
+    for (final (_, _, versions) in _threads)
+      LeveledTextLoader.versions(
+        brief: versions.first,
+        load: () => _fakeLlm(versions.sublist(1)),
+      ),
+  ];
+
+  static Future<List<String>> _fakeLlm(List<String> summaries) async {
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    return summaries;
+  }
+
   @override
   void dispose() {
     _zoom.dispose();
+    for (final loader in _loaders) {
+      loader.dispose();
+    }
     super.dispose();
   }
 
@@ -468,7 +486,7 @@ class _InboxDemoState extends State<InboxDemo>
       children: [
         const _SectionTitle(
           title: 'Inbox',
-          subtitle: 'AI summaries at three lengths, rephrasing included',
+          subtitle: 'AI summaries, generated only when you pinch or tap',
         ),
         Expanded(
           child: SemanticZoomListView.builder(
@@ -477,7 +495,7 @@ class _InboxDemoState extends State<InboxDemo>
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
             itemCount: _threads.length,
             itemBuilder: (context, i) {
-              final (from, time, text) = _threads[i];
+              final (from, time, _) = _threads[i];
               return _TapToExpand(
                 controller: _zoom,
                 itemId: i,
@@ -512,11 +530,15 @@ class _InboxDemoState extends State<InboxDemo>
                               ],
                             ),
                             const SizedBox(height: 4),
-                            LeveledTextView(
-                              text,
+                            LazyLeveledTextView(
+                              _loaders[i],
                               itemId: i,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 height: 1.35,
+                              ),
+                              loadingBuilder: (_) => const Padding(
+                                padding: EdgeInsets.only(top: 6),
+                                child: LinearProgressIndicator(minHeight: 2),
                               ),
                             ),
                           ],

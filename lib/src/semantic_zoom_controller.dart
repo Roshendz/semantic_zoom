@@ -132,6 +132,30 @@ class SemanticZoomController extends ChangeNotifier {
 
   bool get _anchorBusy => _zoom.isAnimating || _pinchAnchored;
 
+  int _holds = 0;
+  int? _holdGeneration;
+
+  /// Keeps the first visible item still until the returned callback is
+  /// called, for example while an item above it grows because its content
+  /// finished loading. Holds can overlap; the anchor is released when the
+  /// last one is. A pinch or level change that starts meanwhile takes over
+  /// the anchor and releases it itself.
+  VoidCallback holdAnchor() {
+    if (_holds == 0 && !_anchorBusy) {
+      anchorLeading();
+      _holdGeneration = _anchorGeneration;
+    }
+    _holds++;
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      if (--_holds > 0) return;
+      if (_holdGeneration == _anchorGeneration) releaseAnchor();
+      _holdGeneration = null;
+    };
+  }
+
   // ── global level ──
 
   /// Stops any settle animation, e.g. when a new gesture begins.

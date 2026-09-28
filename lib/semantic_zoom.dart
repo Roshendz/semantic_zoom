@@ -11,6 +11,7 @@ export 'src/expandable_leveled_text.dart';
 export 'src/leveled_prompt.dart';
 export 'src/leveled_text.dart';
 export 'src/leveled_text_layout.dart';
+export 'src/leveled_text_loader.dart';
 export 'src/leveled_text_view.dart';
 export 'src/semantic_zoom_controller.dart';
 export 'src/semantic_zoom_detector.dart';

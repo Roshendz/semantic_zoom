@@ -1,12 +1,16 @@
 import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'leveled_text.dart';
 import 'leveled_text_layout.dart';
+import 'leveled_text_loader.dart';
 import 'semantic_zoom_controller.dart';
 import 'semantic_zoom_scope.dart';
+
+part 'lazy_leveled_text_view.dart';
 
 /// Shows [text] at the controller's current zoom, morphing between levels.
 ///
@@ -38,7 +42,25 @@ class LeveledTextView extends StatefulWidget {
     this.paragraphGap = 6,
     this.moveCurve = Curves.easeInOutCubic,
     this.fadeCurve = const Interval(0.25, 1),
-  });
+  }) : _cap = null;
+
+  // Used by LazyLeveledTextView: shows at most this zoom (in levels) while
+  // longer versions are loading, then follows it up as they are revealed.
+  const LeveledTextView._capped(
+    this.text, {
+    required ValueListenable<double> cap,
+    this.itemId,
+    this.adjustable = true,
+    this.controller,
+    this.style,
+    this.linkStyle = defaultLinkStyle,
+    this.onLinkTap,
+  })  : _cap = cap,
+        paragraphGap = 6,
+        moveCurve = Curves.easeInOutCubic,
+        fadeCurve = const Interval(0.25, 1);
+
+  final ValueListenable<double>? _cap;
 
   /// Underlined, in the surrounding text colour.
   static const defaultLinkStyle = TextStyle(
@@ -148,9 +170,14 @@ class _LeveledTextViewState extends State<LeveledTextView> {
 
     return LayoutBuilder(
       builder: (context, constraints) => AnimatedBuilder(
-        animation: controller.listenableFor(id),
+        animation: widget._cap == null
+            ? controller.listenableFor(id)
+            : Listenable.merge([controller.listenableFor(id), widget._cap]),
         builder: (context, _) {
-          final z = controller.valueFor(id).clamp(0.0, maxLevel.toDouble());
+          final cap = widget._cap;
+          final raw = controller.valueFor(id);
+          final z = (cap == null ? raw : math.min(raw, cap.value))
+              .clamp(0.0, maxLevel.toDouble());
           final lo = math.min(z.floor(), maxLevel);
           final hi = math.min(lo + 1, maxLevel);
           final from = layout.layoutFor(lo, constraints.maxWidth);
