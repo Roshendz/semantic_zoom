@@ -1,3 +1,13 @@
+## 0.3.1
+
+Documentation only; no code changes.
+
+* New demo GIF recorded from the current example app.
+* README: lists, chats and grids in the introduction; a Contributing
+  section explaining `tool/check.sh`, the screenshot tests and the device
+  test.
+* Shorter pub.dev description mentioning chats, grids and languages.
+
 ## 0.3.0
 
 All additions are opt-in; existing code works unchanged.

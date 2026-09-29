@@ -7,8 +7,8 @@
 **Pinch to change how much a list says, not how big it is.**
 
 Pinch out and every entry grows from a title, to a one-line summary, to the
-full notes. Or tap a single entry to expand just that one. The font size
-never changes. Words already on screen slide to their new spots and new
+full notes, in lists, chats and grids, in any language. Or tap a single
+entry to expand just that one. The font size never changes. Words already on screen slide to their new spots and new
 words fade in around them. The entry under your fingers stays exactly where
 it is.
 
@@ -473,8 +473,28 @@ flutter drive --profile --no-dds -d <device> \
 
 ## Contributing
 
-Issues and PRs are welcome. `flutter analyze` and `flutter test` must pass. CI
-also runs on the minimum supported Flutter version.
+Issues and PRs are welcome. Before opening a PR, run:
+
+```sh
+tool/check.sh
+```
+
+It runs everything a release needs: formatting, analysis, all tests, a
+check that the public API has no breaking changes against the last
+release, the example app, and the oldest supported Flutter version.
+
+`test/golden_test.dart` compares against reference screenshots recorded on
+macOS; CI skips them because other systems draw fonts slightly differently.
+If you change how text is drawn on purpose, update them with
+`flutter test --update-goldens test/golden_test.dart` and explain why in
+the PR.
+
+To try the example on a device, including a test that drives every tab:
+
+```sh
+cd example
+flutter test integration_test/app_test.dart -d <device>
+```
 
 ## License
 

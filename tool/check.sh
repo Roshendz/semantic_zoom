@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-BASE_TAG="${BASE_TAG:-v0.2.0}" # last published release
+BASE_TAG="${BASE_TAG:-v0.3.0}" # last published release
 FLUTTER_MIN="${FLUTTER_MIN:-$HOME/fvm/versions/3.22.3/bin/flutter}"
 DEMO_APP="${DEMO_APP:-../semantic_zoom_demo}"
 export PATH="$PWD/.fvm/flutter_sdk/bin:$PATH" # dart_apitool needs flutter
@@ -34,7 +34,7 @@ report=$(fvm dart pub global run dart_apitool:main diff \
   --old "pub://semantic_zoom/${BASE_TAG#v}" --new . \
   --version-check-mode=none 2>&1)
 echo "$report" | sed -n '/Generating report/,$p'
-if ! grep -q "No breaking changes!" <<<"$report"; then
+if ! grep -qE "No breaking changes!|No changes detected!" <<<"$report"; then
   echo "✗ Breaking API change detected"
   exit 1
 fi
