@@ -1,3 +1,30 @@
+## 0.3.0
+
+All additions are opt-in; existing code works unchanged.
+
+* **Chat-style lists.** Anchoring works in reversed lists (newest item at the
+  bottom). New `SemanticZoomListView.builder(reverse:)`.
+* **Grids.** `SliverSemanticZoomGrid` and `SemanticZoomGridView`, with fixed
+  (`crossAxisCount`) or width-based (`maxCrossAxisExtent`) columns.
+* **Chinese, Japanese, Thai, Lao, Khmer and Myanmar** text morphs and wraps
+  per character. Text in other languages is tokenised exactly as before.
+* **Load on demand.** `LeveledTextLoader` and `LazyLeveledTextView` show the
+  brief text at once and fetch longer versions when an entry is expanded.
+* **Remember the level.** `restorationId` on the list, grid, detector and
+  `ExpandableLeveledText`; `PageStorageKey` keeps an expandable card open
+  after scrolling away.
+* New controller methods: `holdAnchor`, `itemLevels`, `restoreLevel`,
+  `restoreItemLevels`.
+* **Fixed:** scrolling to the start (`jumpTo(0)`, `animateTo(0)`, the iOS
+  status-bar tap) after a pinch stopped short of the first item.
+* **Fixed:** `ExpandableLeveledText` crashed when rebuilt with a new
+  `levelLabels` list or text with a different number of levels.
+* **Fixed:** on a short list, zooming out after zooming in could make
+  layout loop until Flutter gave up ("RenderViewport exceeded its maximum
+  number of layout cycles"), e.g. on phone-sized screens.
+* Performance numbers and a benchmark you can run on your own device.
+* New dependency: `characters` (already part of Flutter).
+
 ## 0.2.0
 
 * **Rich text.** `**bold**`, `*italic*` and `[label](url)` links in both

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'semantic_zoom_controller.dart';
@@ -86,6 +87,11 @@ class RenderSliverSemanticZoomList extends RenderSliverList
 
   /// Anchor corrections smaller than this are ignored.
   static const double _epsilon = 0.5;
+
+  /// One correction per frame is the norm; the rest is headroom for passes
+  /// where the list's own estimates change too.
+  static const int _maxCorrectionsPerFrame = 3;
+  int _correctionsThisFrame = 0;
 
   @override
   void attach(PipelineOwner owner) {
@@ -213,6 +219,17 @@ class RenderSliverSemanticZoomList extends RenderSliverList
     final floor = pixels > 0 ? -pixels : 0.0;
     if (delta < floor) delta = floor;
     if (delta.abs() < _epsilon) return;
+
+    // A correction that keeps being undone within one frame can't win: e.g.
+    // the content shrank so the view can't scroll this far any more, and
+    // the scroll physics pull the offset back each time. Fighting them
+    // would never settle, so after a few tries let them win this frame.
+    if (_correctionsThisFrame >= _maxCorrectionsPerFrame) return;
+    if (_correctionsThisFrame++ == 0) {
+      SchedulerBinding.instance.addPostFrameCallback(
+        (_) => _correctionsThisFrame = 0,
+      );
+    }
 
     // The viewport shifts its offset by `delta` and lays out again within
     // this same frame, so the pinned item never visibly moves.

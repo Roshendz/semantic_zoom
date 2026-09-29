@@ -68,8 +68,18 @@ It suits anything with summaries and details:
   the spring.
 - 🌀 **Physics.** Rubber-banding past the first and last levels, velocity
   projection, a spring settle and a haptic tick.
-- 🧱 **Composable.** A one-widget list, or the pieces inside your own
-  `CustomScrollView`. Any number of levels.
+- 💬 **Lists, chats and grids.** Normal lists, chat-style lists with the
+  newest message at the bottom, and responsive grids of cards.
+- 🌏 **Every language.** Chinese, Japanese and Thai morph and wrap per
+  character; everything else, from English to Sinhala, per word.
+- ⏳ **Load on demand.** Show the brief text now, and fetch the longer
+  versions from your API or an LLM only when someone expands.
+- 💾 **Remembers the level** after the OS restarts the app, and keeps an
+  expanded card open when it scrolls away and back.
+- ⚡ **Fast.** 97–99% of frames within the 8.3 ms budget of a 120 Hz
+  screen on a mid-range phone, with 1,000 entries (see Performance).
+- 🧱 **Composable.** A one-widget list or grid, or the pieces inside your
+  own `CustomScrollView`. Any number of levels.
 
 ## Install
 
@@ -253,6 +263,93 @@ zoom.clearItemLevels();     // back to the global level
 database id. A pinch or `animateToLevel` returns every item to the global
 level.
 
+## Chats: newest at the bottom
+
+```dart
+SemanticZoomListView.builder(
+  controller: zoom,
+  reverse: true, // item 0 is the newest message, drawn at the bottom
+  itemCount: messages.length,
+  itemBuilder: (context, i) => LeveledTextView(messages[i], itemId: i),
+)
+```
+
+Anchoring works the same way: the message under your fingers, or the
+newest visible one, stays still while the others grow upwards. "Jump to the
+newest message" (`scrollController.jumpTo(0)`) lands exactly at the bottom,
+even after a pinch.
+
+## Grids
+
+```dart
+SemanticZoomGridView.builder(
+  controller: zoom,
+  maxCrossAxisExtent: 380, // or crossAxisCount: 2
+  mainAxisSpacing: 12,
+  crossAxisSpacing: 12,
+  itemCount: cards.length,
+  itemBuilder: (context, i) => Card(child: LeveledTextView(cards[i], itemId: i)),
+)
+```
+
+Each row is as tall as its tallest card and grows as the cards zoom. Cards
+in a row are top-aligned. Use `SliverSemanticZoomGrid.builder` inside your
+own `CustomScrollView`.
+
+## Chinese, Japanese and Thai
+
+Languages written without spaces are split per character (Thai per
+cluster, so vowel and tone marks stay with their letter). Latin words and
+numbers inside them stay whole. Nothing to configure:
+
+```dart
+LeveledText.parse('我[非常]喜欢猫');  // 我喜欢猫 → 我非常喜欢猫
+LeveledText.fromVersions(const ['ไปตลาด', 'ไปตลาดเช้านี้']);
+```
+
+## Loading longer versions on demand
+
+Fetch the longer versions only when someone expands an entry, and keep them
+for next time:
+
+```dart
+// Keep loaders with your data, not in build().
+final loader = LeveledTextLoader.versions(
+  brief: visit.title,
+  load: () => api.fetchSummaries(visit.id), // e.g. [summary, notes]
+);
+
+LazyLeveledTextView(
+  loader,
+  itemId: visit.id,
+  loadingBuilder: (context) => const LinearProgressIndicator(minHeight: 2),
+  errorBuilder: (context, error, retry) =>
+      TextButton(onPressed: retry, child: const Text('Retry')),
+)
+```
+
+Loading starts when the entry begins to zoom (a pinch, the buttons, a tap
+or a screen reader). A pinch loads only the entries that are built, not the
+whole list. When the text arrives the new words morph in, and the list
+keeps the first visible entry still while entries above it grow. Use
+`controller.holdAnchor()` for your own content that changes height.
+
+## Remembering the level
+
+| Situation | How |
+|---|---|
+| The OS restarts the app in the background | `restorationId: 'journal'` on the list, grid, detector or `ExpandableLeveledText`, plus `restorationScopeId: 'app'` on your `MaterialApp`. Lists also restore the scroll position and item levels. |
+| An expanded card scrolls away and back | `key: PageStorageKey(article.id)` on the `ExpandableLeveledText` |
+| The user closes and reopens the app | Save it yourself, e.g. with `shared_preferences`: |
+
+```dart
+// A field in your State (with SingleTickerProviderStateMixin):
+late final SemanticZoomController zoom = SemanticZoomController(
+  vsync: this,
+  initialLevel: prefs.getInt('level') ?? 0,
+)..addListener(() => prefs.setInt('level', zoom.level));
+```
+
 ## Accessibility
 
 - Each `LeveledTextView` is an adjustable semantics node. VoiceOver users
@@ -302,15 +399,45 @@ zoom.addListener(() => settingsCubit.saveDetailLevel(zoom.level));
 
 | Class | Role |
 |---|---|
-| `SemanticZoomController` | Continuous `zoom`, committed `level`, `animateToLevel`, `setItemLevel`, `itemLevel`, `levelLabels` |
-| `SemanticZoomListView.builder` | Ready-made list: detector + scroll view + anchored sliver |
+| `SemanticZoomController` | Continuous `zoom`, committed `level`, `animateToLevel`, `setItemLevel`, `itemLevel`, `levelLabels`, `holdAnchor` |
+| `SemanticZoomListView.builder` | Ready-made list: detector + scroll view + anchored sliver; `reverse` for chats |
+| `SemanticZoomGridView.builder` | Ready-made responsive grid |
 | `SemanticZoomDetector` | Turns touch, trackpad, wheel and keyboard input into zoom |
 | `SliverSemanticZoomList` | `SliverList` with scroll anchoring applied during layout |
+| `SliverSemanticZoomGrid` | The grid as a sliver, for your own scroll view |
+| `LazyLeveledTextView` / `LeveledTextLoader` | Brief text now, longer versions loaded on demand |
 | `LeveledTextView` | Paints `LeveledText`, morphing between levels; `itemId` for per-item zoom; `onLinkTap` |
 | `ExpandableLeveledText` | One tap-to-expand text, no controller needed |
 | `LeveledText` / `LeveledToken` | The data model, with `parse`, `fromVersions` and `checkVersions` |
 | `LeveledPrompt` | LLM prompt builder and response parser |
 | `LeveledTextLayout` | The cached layout engine, if you want to paint it yourself |
+
+## Performance
+
+Measured on a **Samsung Galaxy A36** (mid-range, Android 16, 120 Hz screen)
+in profile mode with Flutter 3.44, on a list of **1,000 entries** with rich
+text. Lowest result of two runs:
+
+| Scenario | Frames within 8.3 ms (120 Hz) | Within 16.7 ms (60 Hz) | Avg build | Avg raster |
+|---|---|---|---|---|
+| Pinch: brief → full → brief | 96.9% | 99.1% | 1.8 ms | 4.1 ms |
+| Level buttons, 5 changes | 97.8% | 100% | 2.5 ms | 3.6 ms |
+| Fling scrolling at full detail | 98.6% | 99.8% | 2.0 ms | 3.9 ms |
+
+Text is measured once per entry and level, then cached; a pinch only moves
+and fades words. Tips:
+
+- Create `LeveledText` objects once (with your data), not in `build()`.
+- For long texts in long lists, use `LazyLeveledTextView` so longer
+  versions are only built for entries someone expands.
+
+Run the same benchmark on your own device from `example/`:
+
+```sh
+flutter drive --profile --no-dds -d <device> \
+  --driver=test_driver/perf_driver.dart \
+  --target=integration_test/pinch_benchmark_test.dart
+```
 
 ## How it works
 
@@ -334,12 +461,13 @@ zoom.addListener(() => settingsCubit.saveDetailLevel(zoom.level));
 
 - Inline widgets (chips, icons) inside text aren't supported yet.
 - `LeveledText.parse` markup covers three levels; use `fromVersions` for more.
-- Vertical and left-to-right horizontal lists (`AxisDirection.down` and
-  `right`); reversed lists aren't anchored yet.
+- Anchoring covers vertical lists (normal and reversed) and left-to-right
+  horizontal lists.
+- Cards in a grid row are top-aligned; they aren't stretched to equal
+  height.
 - A word wider than the line is positioned at its first fragment.
 - Ligatures that span two words aren't formed, because each word is painted
   separately.
-- Splitting is by spaces. CJK text without spaces needs explicit tokens.
 - On the web, browsers may handle Ctrl/⌘ `+` / `−` as page zoom before the
   app sees them.
 
