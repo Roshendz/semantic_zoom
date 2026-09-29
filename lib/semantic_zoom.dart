@@ -15,6 +15,8 @@ export 'src/leveled_text_loader.dart';
 export 'src/leveled_text_view.dart';
 export 'src/semantic_zoom_controller.dart';
 export 'src/semantic_zoom_detector.dart';
+export 'src/semantic_zoom_grid_view.dart';
 export 'src/semantic_zoom_list_view.dart';
 export 'src/semantic_zoom_scope.dart';
+export 'src/sliver_semantic_zoom_grid.dart';
 export 'src/sliver_semantic_zoom_list.dart';

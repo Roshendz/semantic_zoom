@@ -315,7 +315,8 @@ final _visits = [
   ),
 ];
 
-/// The one-widget setup with [SemanticZoomListView.builder].
+/// The one-widget setup with [SemanticZoomGridView.builder]: a responsive
+/// grid of cards.
 class HealthDemo extends StatefulWidget {
   const HealthDemo({super.key});
 
@@ -346,15 +347,19 @@ class _HealthDemoState extends State<HealthDemo>
           subtitle: 'Visit title › summary › clinician notes',
         ),
         Expanded(
-          child: SemanticZoomListView.builder(
+          // One column on a phone; more on a tablet or a wide browser.
+          child: SemanticZoomGridView.builder(
             controller: _zoom,
             restorationId: 'health',
+            maxCrossAxisExtent: 380,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             itemCount: _visits.length,
             itemBuilder: (context, i) {
               final (date, dept, text) = _visits[i];
               return Card.outlined(
-                margin: const EdgeInsets.only(bottom: 12),
+                margin: EdgeInsets.zero,
                 clipBehavior: Clip.antiAlias,
                 child: _TapToExpand(
                   controller: _zoom,
