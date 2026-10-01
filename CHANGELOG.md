@@ -1,3 +1,10 @@
+## 0.3.2
+
+Documentation only; no code changes.
+
+* Added a way to support the package on Ko-fi (README and pub.dev sponsor
+  link).
+
 ## 0.3.1
 
 Documentation only; no code changes.

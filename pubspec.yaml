@@ -2,10 +2,12 @@ name: semantic_zoom
 description: >-
   Pinch or tap to stretch text from a title to full notes, in lists, chats and
   grids: an animated read more and StretchText for Flutter, in any language.
-version: 0.3.1
+version: 0.3.2
 homepage: https://roshendz.github.io/semantic_zoom/
 repository: https://github.com/Roshendz/semantic_zoom
 issue_tracker: https://github.com/Roshendz/semantic_zoom/issues
+funding:
+  - https://ko-fi.com/roshendz
 screenshots:
   - description: Pinching a travel journal from highlights to full entries, then tapping one day
     path: doc/demo.gif

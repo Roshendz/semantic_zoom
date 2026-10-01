@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-BASE_TAG="${BASE_TAG:-v0.3.0}" # last published release
+BASE_TAG="${BASE_TAG:-v0.3.1}" # last published release
 FLUTTER_MIN="${FLUTTER_MIN:-$HOME/fvm/versions/3.22.3/bin/flutter}"
 DEMO_APP="${DEMO_APP:-../semantic_zoom_demo}"
 export PATH="$PWD/.fvm/flutter_sdk/bin:$PATH" # dart_apitool needs flutter

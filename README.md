@@ -3,6 +3,7 @@
 [![pub package](https://img.shields.io/pub/v/semantic_zoom.svg)](https://pub.dev/packages/semantic_zoom)
 [![CI](https://github.com/Roshendz/semantic_zoom/actions/workflows/ci.yml/badge.svg)](https://github.com/Roshendz/semantic_zoom/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Support me on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20me-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/roshendz)
 
 **Pinch to change how much a list says, not how big it is.**
 
@@ -470,6 +471,16 @@ flutter drive --profile --no-dds -d <device> \
   separately.
 - On the web, browsers may handle Ctrl/⌘ `+` / `−` as page zoom before the
   app sees them.
+
+## Support
+
+semantic_zoom is free and MIT licensed, built and maintained in my spare
+time. If it saves you time or makes your app nicer, you can buy me a coffee:
+
+<a href="https://ko-fi.com/roshendz"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" height="36"></a>
+
+A ⭐ on [GitHub](https://github.com/Roshendz/semantic_zoom) or a 👍 on
+[pub.dev](https://pub.dev/packages/semantic_zoom) helps a lot too.
 
 ## Contributing
 
