@@ -1,11 +1,14 @@
-import 'package:flutter/painting.dart';
-
-import 'leveled_text.dart';
+part of 'leveled_text_view.dart';
 
 /// Where every token sits at one detail level.
 class LevelLayout {
   /// Creates a layout. Use [LeveledTextLayout.layoutFor] instead.
-  const LevelLayout(this.offsets, this.height);
+  const LevelLayout(
+    this.offsets,
+    this.height, {
+    this.width = 0,
+    this.ellipsis,
+  });
 
   /// Top-left of each token, indexed like [LeveledText.tokens]. `null` means
   /// hidden at this level.
@@ -13,6 +16,14 @@ class LevelLayout {
 
   /// Total height of the laid-out text.
   final double height;
+
+  /// Width of the laid-out text: the width it was laid out for, or, for an
+  /// unbounded width, the width of its longest line.
+  final double width;
+
+  /// Where "…" is drawn when the text was cut short by `maxLines` with
+  /// [TextOverflow.ellipsis]; otherwise null.
+  final Offset? ellipsis;
 }
 
 /// Measures [LeveledText] with Flutter's own paragraph engine.
@@ -33,7 +44,11 @@ class LeveledTextLayout {
     required TextDirection textDirection,
     this.paragraphGap = 6,
     TextStyle? linkStyle,
-  })  : _style = style,
+    this.textAlign = TextAlign.start,
+    this.maxLines,
+    this.overflow = TextOverflow.clip,
+  })  : assert(maxLines == null || maxLines > 0),
+        _style = style,
         _linkStyle = linkStyle,
         _textScaler = textScaler,
         _textDirection = textDirection,
@@ -64,6 +79,24 @@ class LeveledTextLayout {
 
   /// The text being laid out.
   final LeveledText text;
+
+  /// How lines are aligned, as in [Text.textAlign].
+  final TextAlign textAlign;
+
+  /// The most lines shown at any level, or null for no limit. Words past
+  /// the limit are hidden.
+  final int? maxLines;
+
+  /// How text cut short by [maxLines] ends: [TextOverflow.ellipsis] adds
+  /// "…" after the last whole word that fits; the other values just cut.
+  final TextOverflow overflow;
+
+  /// Paints the "…" for [TextOverflow.ellipsis].
+  late final TextPainter _ellipsisPainter = _painter(
+    TextSpan(text: _ellipsis, style: _style),
+  )..layout();
+
+  static const _ellipsis = '\u2026';
 
   /// Extra space between paragraphs.
   final double paragraphGap;
@@ -105,14 +138,42 @@ class LeveledTextLayout {
   LevelLayout layoutFor(int level, double maxWidth) =>
       _cache.putIfAbsent((level, maxWidth), () => _compute(level, maxWidth));
 
-  LevelLayout _compute(int level, double maxWidth) {
+  /// The text shown at [level] as one span per paragraph, styled exactly as
+  /// it is measured and drawn. A `RichText` per paragraph, stacked with
+  /// [paragraphGap] between them, looks the same as the morphing view at
+  /// rest; the view uses this to make text selectable.
+  List<TextSpan> _paragraphsAt(int level, double maxWidth) {
+    final layout = layoutFor(level, maxWidth);
+    return [
+      for (final p in _build(
+        level,
+        keep: maxLines == null ? null : _kept(layout),
+        ellipsis: layout.ellipsis != null,
+      ).paragraphs)
+        TextSpan(style: _style, children: p),
+    ];
+  }
+
+  static Set<int> _kept(LevelLayout layout) => {
+        for (var i = 0; i < layout.offsets.length; i++)
+          if (layout.offsets[i] != null) i,
+      };
+
+  _Built _build(int level, {Set<int>? keep, bool ellipsis = false}) {
     final tokens = text.tokens;
     // The paragraph is built from styled spans so bold, italic and links are
     // measured exactly as they are painted.
     final spans = <InlineSpan>[];
+    final paragraphs = <List<InlineSpan>>[[]];
     var length = 0;
     void add(String s, [TextStyle? style]) {
-      spans.add(TextSpan(text: s, style: style));
+      final span = TextSpan(text: s, style: style);
+      spans.add(span);
+      if (s == '\n') {
+        paragraphs.add([]);
+      } else {
+        paragraphs.last.add(span);
+      }
       length += s.length;
     }
 
@@ -120,10 +181,12 @@ class LeveledTextLayout {
     final paragraphOf = List<int>.filled(tokens.length, 0);
     var paragraph = 0;
     var pendingBreak = false;
+    LeveledToken? previous;
 
     for (var i = 0; i < tokens.length; i++) {
       final t = tokens[i];
       if (!t.isVisibleAt(level)) continue;
+      if (keep != null && !t.isBreak && !keep.contains(i)) continue;
       if (t.isBreak) {
         // Collapse breaks that would produce empty paragraphs at this level.
         pendingBreak = length > 0;
@@ -134,35 +197,155 @@ class LeveledTextLayout {
         paragraph++;
         pendingBreak = false;
       } else if (length > 0 && !t.glued) {
-        add(' ');
+        // A space inside a multi-word link carries the link's colour and
+        // underline (which don't change its width), so selectable text
+        // shows one continuous link, like the morphing view.
+        add(
+            ' ',
+            previous?.link != null && previous!.link == t.link
+                ? _decorationOf(styleOf(t))
+                : null);
       }
       final start = length;
       add(t.text, styleOf(t));
       ranges[i] = (start, length);
       paragraphOf[i] = paragraph;
+      previous = t;
+    }
+    (int, int)? ellipsisRange;
+    if (ellipsis) {
+      final start = length;
+      add(_ellipsis);
+      ellipsisRange = (start, length);
+    }
+    return _Built(
+      spans,
+      paragraphs,
+      ranges,
+      paragraphOf,
+      paragraph,
+      length,
+      ellipsisRange,
+    );
+  }
+
+  static TextStyle _decorationOf(TextStyle s) => TextStyle(
+        color: s.color,
+        decoration: s.decoration,
+        decorationColor: s.decorationColor,
+        decorationStyle: s.decorationStyle,
+        decorationThickness: s.decorationThickness,
+      );
+
+  LevelLayout _compute(int level, double maxWidth) {
+    var built = _build(level);
+    var para = _layoutParagraph(built, maxWidth);
+    var offsets = _offsetsIn(built, para);
+
+    // Cut short with an ellipsis: keep whole words only, then lay the text
+    // out again with "…" after them so alignment still holds. Drop words
+    // from the end until it fits.
+    if (overflow == TextOverflow.ellipsis && para.didExceedMaxLines) {
+      final keep = _kept(LevelLayout(offsets, 0));
+      while (true) {
+        para.dispose();
+        built = _build(level, keep: keep, ellipsis: true);
+        para = _layoutParagraph(built, maxWidth);
+        if (!para.didExceedMaxLines || keep.isEmpty) break;
+        keep.remove(keep.reduce(math.max));
+      }
+      offsets = _offsetsIn(built, para);
     }
 
-    // minLevel pins the paragraph to the full width; otherwise it shrinks to
-    // its text and RTL lines would hug the left edge.
-    final para = _painter(TextSpan(style: _style, children: spans))
-      ..layout(minWidth: maxWidth, maxWidth: maxWidth);
-    final offsets = List<Offset?>.filled(tokens.length, null);
-    for (var i = 0; i < tokens.length; i++) {
-      final r = ranges[i];
+    Offset? ellipsis;
+    final e = built.ellipsisRange;
+    if (e != null) {
+      final boxes = para.getBoxesForSelection(
+        TextSelection(baseOffset: e.$1, extentOffset: e.$2),
+      );
+      if (boxes.isNotEmpty) {
+        ellipsis = Offset(
+          boxes.first.left,
+          boxes.first.top + built.paragraph * paragraphGap,
+        );
+      }
+    }
+
+    // Only paragraphs with shown words add a gap.
+    var paragraphs = 0;
+    for (var i = 0; i < offsets.length; i++) {
+      if (offsets[i] != null) {
+        paragraphs = math.max(paragraphs, built.paragraphOf[i]);
+      }
+    }
+    final height =
+        built.length == 0 ? 0.0 : para.height + paragraphs * paragraphGap;
+    final width = built.length == 0 ? 0.0 : para.width;
+    para.dispose();
+    return LevelLayout(offsets, height, width: width, ellipsis: ellipsis);
+  }
+
+  TextPainter _layoutParagraph(_Built built, double maxWidth) =>
+      // minWidth pins the paragraph to the full width; otherwise it shrinks
+      // to its text and RTL lines would hug the left edge. With an unbounded
+      // width it shrink-wraps to its longest line, like Text.
+      TextPainter(
+        text: TextSpan(style: _style, children: built.spans),
+        textDirection: _textDirection,
+        textScaler: _textScaler,
+        textAlign: textAlign,
+        maxLines: maxLines,
+      )..layout(
+          minWidth: maxWidth.isFinite ? maxWidth : 0,
+          maxWidth: maxWidth,
+        );
+
+  List<Offset?> _offsetsIn(_Built built, TextPainter para) {
+    final offsets = List<Offset?>.filled(text.tokens.length, null);
+    for (var i = 0; i < offsets.length; i++) {
+      final r = built.ranges[i];
       if (r == null) continue;
       final boxes = para.getBoxesForSelection(
         TextSelection(baseOffset: r.$1, extentOffset: r.$2),
       );
+      // No box: cut off by maxLines.
       if (boxes.isEmpty) continue;
       // A token is one word, so normally one box. If a word is wider than
       // the line and the engine splits it, anchor at the first fragment.
       final box = boxes.first;
-      offsets[i] = Offset(box.left, box.top + paragraphOf[i] * paragraphGap);
+      offsets[i] =
+          Offset(box.left, box.top + built.paragraphOf[i] * paragraphGap);
     }
+    return offsets;
+  }
 
-    final height = length == 0 ? 0.0 : para.height + paragraph * paragraphGap;
-    para.dispose();
-    return LevelLayout(offsets, height);
+  /// How far below a real paragraph's glyphs the morphing view draws them
+  /// at [level]. Each word is painted at its tight glyph box, and the
+  /// word's own painter adds the line's leading on top of that. Selectable
+  /// text is shifted by this much so both look the same.
+  double _glyphInsetAt(int level) {
+    for (var i = 0; i < painters.length; i++) {
+      final t = text.tokens[i];
+      if (t.isBreak || !t.isVisibleAt(level)) continue;
+      final boxes = painters[i].getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: t.text.length),
+      );
+      return boxes.isEmpty ? 0 : boxes.first.top;
+    }
+    return 0;
+  }
+
+  /// The narrowest width the text can take at [level] without breaking a
+  /// word: its widest visible token.
+  double _minIntrinsicWidthAt(int level) {
+    var widest = 0.0;
+    for (var i = 0; i < painters.length; i++) {
+      final t = text.tokens[i];
+      if (!t.isBreak && t.isVisibleAt(level) && painters[i].width > widest) {
+        widest = painters[i].width;
+      }
+    }
+    return widest;
   }
 
   /// Releases the per-token painters.
@@ -173,5 +356,40 @@ class LeveledTextLayout {
     for (final p in linkGapPainters) {
       p?.dispose();
     }
+    _ellipsisPainter.dispose();
   }
+}
+
+class _Built {
+  _Built(
+    this.spans,
+    this.paragraphs,
+    this.ranges,
+    this.paragraphOf,
+    this.paragraph,
+    this.length,
+    this.ellipsisRange,
+  );
+
+  final List<InlineSpan> spans;
+  final List<List<InlineSpan>> paragraphs;
+  final List<(int, int)?> ranges;
+  final List<int> paragraphOf;
+  final int paragraph;
+  final int length;
+  final (int, int)? ellipsisRange;
+
+  ({
+    List<InlineSpan> spans,
+    List<(int, int)?> ranges,
+    List<int> paragraphOf,
+    int paragraph,
+    int length,
+  }) get record => (
+        spans: spans,
+        ranges: ranges,
+        paragraphOf: paragraphOf,
+        paragraph: paragraph,
+        length: length,
+      );
 }

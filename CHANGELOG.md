@@ -1,3 +1,28 @@
+## 0.4.0
+
+All additions are opt-in; existing code works unchanged.
+
+* **Works where `Text` works.** `LeveledTextView` no longer throws inside a
+  `Row` without `Expanded`, `IntrinsicHeight`, `IntrinsicWidth`, a
+  horizontal list, a `Chip`, `UnconstrainedBox` or a `Table`. With an
+  unbounded width it's as wide as its text; with a bounded width it fills
+  it, as before.
+* **Selectable text.** Inside a `SelectionArea`, text at rest can be
+  selected and copied (paragraphs are copied with line breaks), and looks
+  exactly as before.
+* **`textAlign`, `maxLines` and `overflow`** on `LeveledTextView`,
+  `ExpandableLeveledText` and `LazyLeveledTextView`.
+  `TextOverflow.ellipsis` ends the last line with "…" after a whole word.
+* **`DefaultSemanticZoomController`** creates, provides and disposes a
+  controller, with `onLevelChanged` and `DefaultSemanticZoomController.of`.
+* **Clearer errors.** A view without a controller now explains how to fix
+  it (in release builds too). In debug builds, a hint is printed when a
+  text has more levels than its controller.
+* New: `LevelLayout.width` and `ellipsis`; `LeveledTextLayout.textAlign`,
+  `maxLines` and `overflow`.
+* Example: the Reads tab is selectable; the Chat tab uses
+  `DefaultSemanticZoomController`.
+
 ## 0.3.2
 
 Documentation only; no code changes.

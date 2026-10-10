@@ -42,6 +42,9 @@ class LazyLeveledTextView extends StatefulWidget {
     this.loadingBuilder,
     this.errorBuilder,
     this.revealDuration = const Duration(milliseconds: 350),
+    this.textAlign = TextAlign.start,
+    this.maxLines,
+    this.overflow = TextOverflow.clip,
   });
 
   /// Provides the brief text and loads the rest.
@@ -79,6 +82,15 @@ class LazyLeveledTextView extends StatefulWidget {
   /// How long the new words take to morph in once loaded. Skipped when the
   /// platform asks to reduce motion.
   final Duration revealDuration;
+
+  /// See [LeveledTextView.textAlign].
+  final TextAlign textAlign;
+
+  /// See [LeveledTextView.maxLines].
+  final int? maxLines;
+
+  /// See [LeveledTextView.overflow].
+  final TextOverflow overflow;
 
   @override
   State<LazyLeveledTextView> createState() => _LazyLeveledTextViewState();
@@ -222,6 +234,9 @@ class _LazyLeveledTextViewState extends State<LazyLeveledTextView>
       style: widget.style,
       linkStyle: widget.linkStyle,
       onLinkTap: widget.onLinkTap,
+      textAlign: widget.textAlign,
+      maxLines: widget.maxLines,
+      overflow: widget.overflow,
     );
     final error = loader.error;
     final extra = loader.isLoading

@@ -46,6 +46,9 @@ class ExpandableLeveledText extends StatefulWidget {
     this.showMoreHint = 'Show more',
     this.showLessHint = 'Show less',
     this.restorationId,
+    this.textAlign = TextAlign.start,
+    this.maxLines,
+    this.overflow = TextOverflow.clip,
   });
 
   /// The text to display.
@@ -96,6 +99,15 @@ class ExpandableLeveledText extends StatefulWidget {
   /// To keep the level when the text scrolls out of a list and back, give
   /// it a [PageStorageKey] instead, e.g. `key: PageStorageKey(article.id)`.
   final String? restorationId;
+
+  /// See [LeveledTextView.textAlign].
+  final TextAlign textAlign;
+
+  /// See [LeveledTextView.maxLines].
+  final int? maxLines;
+
+  /// See [LeveledTextView.overflow].
+  final TextOverflow overflow;
 
   @override
   State<ExpandableLeveledText> createState() => ExpandableLeveledTextState();
@@ -242,6 +254,9 @@ class ExpandableLeveledTextState extends State<ExpandableLeveledText>
       style: widget.style,
       linkStyle: widget.linkStyle,
       onLinkTap: widget.onLinkTap,
+      textAlign: widget.textAlign,
+      maxLines: widget.maxLines,
+      overflow: widget.overflow,
     );
     final canStep = level < maxLevel || widget.wrap;
     if (widget.expandOnTap && canStep) {

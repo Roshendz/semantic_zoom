@@ -20,15 +20,30 @@ class SemanticZoomScope extends InheritedWidget {
       .dependOnInheritedWidgetOfExactType<SemanticZoomScope>()
       ?.controller;
 
-  /// The nearest controller. Throws if there is none.
+  /// The nearest controller. Throws a [FlutterError] explaining how to fix
+  /// it if there is none.
   static SemanticZoomController of(BuildContext context) {
-    final c = maybeOf(context);
-    assert(
-      c != null,
-      'No SemanticZoomScope found. Wrap the list in a SemanticZoomDetector '
-      'or pass a controller explicitly.',
-    );
-    return c!;
+    final controller = maybeOf(context);
+    if (controller != null) return controller;
+    throw FlutterError.fromParts([
+      ErrorSummary(
+          'No SemanticZoomController found for ${context.widget.runtimeType}.'),
+      ErrorDescription(
+        'LeveledTextView and LazyLeveledTextView follow the controller of '
+        'the list they are in. This one is not inside a SemanticZoomDetector, '
+        'SemanticZoomListView, SemanticZoomGridView or '
+        'DefaultSemanticZoomController, and no controller was passed.',
+      ),
+      ErrorHint(
+        'Wrap the list in one of those, or pass a controller: '
+        'LeveledTextView(text, controller: zoom). For a single text that '
+        'expands on tap, use ExpandableLeveledText instead.',
+      ),
+      ErrorHint(
+        'See https://pub.dev/packages/semantic_zoom#using-your-own-scroll-view',
+      ),
+      context.describeElement('The widget that needed a controller was'),
+    ]);
   }
 
   @override

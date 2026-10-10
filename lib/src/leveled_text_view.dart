@@ -2,15 +2,16 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import 'leveled_text.dart';
-import 'leveled_text_layout.dart';
 import 'leveled_text_loader.dart';
 import 'semantic_zoom_controller.dart';
 import 'semantic_zoom_scope.dart';
 
 part 'lazy_leveled_text_view.dart';
+part 'leveled_text_layout.dart';
 
 /// Shows [text] at the controller's current zoom, morphing between levels.
 ///
@@ -42,7 +43,11 @@ class LeveledTextView extends StatefulWidget {
     this.paragraphGap = 6,
     this.moveCurve = Curves.easeInOutCubic,
     this.fadeCurve = const Interval(0.25, 1),
-  }) : _cap = null;
+    this.textAlign = TextAlign.start,
+    this.maxLines,
+    this.overflow = TextOverflow.clip,
+  })  : assert(maxLines == null || maxLines > 0),
+        _cap = null;
 
   // Used by LazyLeveledTextView: shows at most this zoom (in levels) while
   // longer versions are loading, then follows it up as they are revealed.
@@ -55,6 +60,9 @@ class LeveledTextView extends StatefulWidget {
     this.style,
     this.linkStyle = defaultLinkStyle,
     this.onLinkTap,
+    this.textAlign = TextAlign.start,
+    this.maxLines,
+    this.overflow = TextOverflow.clip,
   })  : _cap = cap,
         paragraphGap = 6,
         moveCurve = Curves.easeInOutCubic,
@@ -101,6 +109,18 @@ class LeveledTextView extends StatefulWidget {
   /// reflow begins.
   final Curve fadeCurve;
 
+  /// How lines are aligned, as in [Text.textAlign].
+  final TextAlign textAlign;
+
+  /// The most lines shown at any level, or null for no limit. Words past
+  /// the limit fade out as the text grows. Screen readers still get the
+  /// whole text.
+  final int? maxLines;
+
+  /// How text cut short by [maxLines] ends. [TextOverflow.ellipsis] adds
+  /// "…" after the last whole word that fits; the other values just cut.
+  final TextOverflow overflow;
+
   @override
   State<LeveledTextView> createState() => _LeveledTextViewState();
 }
@@ -123,7 +143,10 @@ class _LeveledTextViewState extends State<LeveledTextView> {
     if (old.text != widget.text ||
         old.style != widget.style ||
         old.linkStyle != widget.linkStyle ||
-        old.paragraphGap != widget.paragraphGap) {
+        old.paragraphGap != widget.paragraphGap ||
+        old.textAlign != widget.textAlign ||
+        old.maxLines != widget.maxLines ||
+        old.overflow != widget.overflow) {
       _layout?.dispose();
       _layout = null;
     }
@@ -152,73 +175,207 @@ class _LeveledTextViewState extends State<LeveledTextView> {
       textDirection: direction,
       paragraphGap: widget.paragraphGap,
       linkStyle: widget.linkStyle,
+      textAlign: widget.textAlign,
+      maxLines: widget.maxLines,
+      overflow: widget.overflow,
     );
   }
 
   @override
   void dispose() {
     _layout?.dispose();
+    _selection.dispose();
     super.dispose();
+  }
+
+  // The zoom this view shows: the item's zoom, limited by the lazy view's
+  // cap while longer versions load.
+  double _zoomOf(SemanticZoomController controller) {
+    final cap = widget._cap;
+    final raw = controller.valueFor(widget.itemId);
+    return (cap == null ? raw : math.min(raw, cap.value))
+        .clamp(0.0, controller.maxLevel.toDouble());
+  }
+
+  /// The layouts and progress between them for [z] at [maxWidth].
+  (LevelLayout, LevelLayout, double) _between(
+    SemanticZoomController controller,
+    double z,
+    double maxWidth,
+  ) {
+    final maxLevel = controller.maxLevel;
+    final lo = math.min(z.floor(), maxLevel);
+    final hi = math.min(lo + 1, maxLevel);
+    return (
+      _layout!.layoutFor(lo, maxWidth),
+      _layout!.layoutFor(hi, maxWidth),
+      widget.moveCurve.transform(z - lo),
+    );
+  }
+
+  /// The size this view takes for [maxWidth]: the full width when it is
+  /// bounded, and its text's own width when it isn't, like Text.
+  Size _sizeFor(SemanticZoomController controller, double maxWidth) {
+    final (from, to, move) =
+        _between(controller, _zoomOf(controller), maxWidth);
+    return Size(
+      maxWidth.isFinite ? maxWidth : lerpDouble(from.width, to.width, move)!,
+      lerpDouble(from.height, to.height, move)!,
+    );
+  }
+
+  /// The narrowest this view can be without breaking a word, never more
+  /// than its natural width.
+  double _minWidthFor(SemanticZoomController controller) {
+    final z = _zoomOf(controller);
+    final lo = math.min(z.floor(), controller.maxLevel);
+    final hi = math.min(lo + 1, controller.maxLevel);
+    final widest = math.max(
+      _layout!._minIntrinsicWidthAt(lo),
+      z > lo ? _layout!._minIntrinsicWidthAt(hi) : 0.0,
+    );
+    return math.min(widest, _sizeFor(controller, double.infinity).width);
+  }
+
+  bool _warnedLevels = false;
+
+  /// In debug builds, says once when the text has more levels than the
+  /// controller: those words could never be shown.
+  void _checkLevels(SemanticZoomController controller) {
+    assert(() {
+      final textLevels = widget.text.maxLevel + 1;
+      if (!_warnedLevels && textLevels > controller.levelCount) {
+        _warnedLevels = true;
+        debugPrint(
+          'semantic_zoom: a LeveledTextView has $textLevels levels, but its '
+          'SemanticZoomController has levelCount: ${controller.levelCount}. '
+          'Words from level ${controller.levelCount} on will never show. '
+          'Use SemanticZoomController(levelCount: $textLevels).',
+        );
+      }
+      return true;
+    }());
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller ?? SemanticZoomScope.of(context);
-    final layout = _layout!;
+    _checkLevels(controller);
     final maxLevel = controller.maxLevel;
-    final id = widget.itemId;
+    final cap = widget._cap;
+    final listenable = cap == null
+        ? controller.listenableFor(widget.itemId)
+        : Listenable.merge([controller.listenableFor(widget.itemId), cap]);
 
-    return LayoutBuilder(
-      builder: (context, constraints) => AnimatedBuilder(
-        animation: widget._cap == null
-            ? controller.listenableFor(id)
-            : Listenable.merge([controller.listenableFor(id), widget._cap]),
-        builder: (context, _) {
-          final cap = widget._cap;
-          final raw = controller.valueFor(id);
-          final z = (cap == null ? raw : math.min(raw, cap.value))
-              .clamp(0.0, maxLevel.toDouble());
-          final lo = math.min(z.floor(), maxLevel);
-          final hi = math.min(lo + 1, maxLevel);
-          final from = layout.layoutFor(lo, constraints.maxWidth);
-          final to = layout.layoutFor(hi, constraints.maxWidth);
-          final move = widget.moveCurve.transform(z - lo);
-          final frame = _Frame(layout, from, to, move, z, widget.fadeCurve);
-          final shown = z.round();
+    return _Measured(
+      measure: (maxWidth) => _sizeFor(controller, maxWidth),
+      minWidth: () => _minWidthFor(controller),
+      listenable: listenable,
+      child: LayoutBuilder(
+        builder: (context, constraints) => AnimatedBuilder(
+          animation: listenable,
+          builder: (context, _) {
+            final z = _zoomOf(controller);
+            final (from, to, move) =
+                _between(controller, z, constraints.maxWidth);
+            final frame = _Frame(_layout!, from, to, move, z, widget.fadeCurve);
+            final shown = z.round();
 
-          Widget content = CustomPaint(painter: _MorphPainter(frame));
-          if (widget.onLinkTap != null) {
-            content = Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(child: content),
-                ..._linkTargets(frame),
-              ],
+            final width = constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : lerpDouble(from.width, to.width, move)!;
+            // Inside a SelectionArea, show real text while at rest so it
+            // can be selected and copied; the morph takes over again as
+            // soon as the zoom moves.
+            final selectable = SelectionContainer.maybeOf(context) != null;
+            Widget content = selectable && (z - shown).abs() < 1e-3
+                ? _selectableText(context, shown, width)
+                : CustomPaint(painter: _MorphPainter(frame));
+            if (widget.onLinkTap != null) {
+              content = Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(child: content),
+                  ..._linkTargets(frame),
+                ],
+              );
+            }
+
+            return Semantics(
+              label: widget.text.textAt(shown),
+              value: widget.adjustable ? controller.labelForLevel(shown) : null,
+              increasedValue: widget.adjustable && shown < maxLevel
+                  ? controller.labelForLevel(shown + 1)
+                  : null,
+              decreasedValue: widget.adjustable && shown > 0
+                  ? controller.labelForLevel(shown - 1)
+                  : null,
+              onIncrease: widget.adjustable && shown < maxLevel
+                  ? () => _step(controller, shown + 1)
+                  : null,
+              onDecrease: widget.adjustable && shown > 0
+                  ? () => _step(controller, shown - 1)
+                  : null,
+              child: SizedBox(
+                width: width,
+                height: lerpDouble(from.height, to.height, move),
+                child: content,
+              ),
             );
-          }
+          },
+        ),
+      ),
+    );
+  }
 
-          return Semantics(
-            label: widget.text.textAt(shown),
-            value: widget.adjustable ? controller.labelForLevel(shown) : null,
-            increasedValue: widget.adjustable && shown < maxLevel
-                ? controller.labelForLevel(shown + 1)
-                : null,
-            decreasedValue: widget.adjustable && shown > 0
-                ? controller.labelForLevel(shown - 1)
-                : null,
-            onIncrease: widget.adjustable && shown < maxLevel
-                ? () => _step(controller, shown + 1)
-                : null,
-            onDecrease: widget.adjustable && shown > 0
-                ? () => _step(controller, shown - 1)
-                : null,
-            child: SizedBox(
-              width: constraints.maxWidth,
-              height: lerpDouble(from.height, to.height, move),
-              child: content,
-            ),
-          );
-        },
+  /// Joins the paragraphs' selections with line breaks when copied.
+  final _selection = _ParagraphsSelectionDelegate();
+
+  /// The text at [level] as real, selectable text: one RichText per
+  /// paragraph, laid out exactly like the morphing view at rest.
+  Widget _selectableText(BuildContext context, int level, double width) {
+    final paragraphs = _layout!._paragraphsAt(level, width);
+    final color = DefaultSelectionStyle.of(context).selectionColor ??
+        DefaultSelectionStyle.defaultColor;
+    return ExcludeSemantics(
+      // The view's own semantics already read this text.
+      child: OverflowBox(
+        alignment: AlignmentDirectional.topStart,
+        minWidth: width,
+        maxWidth: width,
+        minHeight: 0,
+        maxHeight: double.infinity,
+        child: SelectionContainer(
+          delegate: _selection,
+          child: Builder(
+            builder: (context) {
+              final registrar = SelectionContainer.maybeOf(context);
+              // Shifted like the morphing view draws it. A transform,
+              // because the shift can be negative (some fonts' glyphs reach
+              // above the line box).
+              return Transform.translate(
+                offset: Offset(0, _layout!._glyphInsetAt(level)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < paragraphs.length; i++) ...[
+                      if (i > 0) SizedBox(height: widget.paragraphGap),
+                      RichText(
+                        text: paragraphs[i],
+                        textAlign: widget.textAlign,
+                        textDirection: _direction,
+                        textScaler: _scaler!,
+                        selectionRegistrar: registrar,
+                        selectionColor: color,
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -285,20 +442,135 @@ class _LeveledTextViewState extends State<LeveledTextView> {
   }
 }
 
+/// Treats a view's paragraphs as one selectable text whose copied form has
+/// a line break between paragraphs.
+class _ParagraphsSelectionDelegate
+    extends MultiSelectableSelectionContainerDelegate {
+  @override
+  void ensureChildUpdated(Selectable selectable) {}
+
+  @override
+  SelectedContent? getSelectedContent() {
+    final parts = <String>[];
+    for (final selectable in selectables) {
+      final content = selectable.getSelectedContent();
+      if (content != null) parts.add(content.plainText);
+    }
+    return parts.isEmpty ? null : SelectedContent(plainText: parts.join('\n'));
+  }
+}
+
+/// Answers Flutter's sizing questions (intrinsic sizes and dry layout) for
+/// a [LeveledTextView], which a [LayoutBuilder] can't do on its own. Layout
+/// and painting are left to the child.
+class _Measured extends SingleChildRenderObjectWidget {
+  const _Measured({
+    required this.measure,
+    required this.minWidth,
+    required this.listenable,
+    required super.child,
+  });
+
+  final Size Function(double maxWidth) measure;
+  final double Function() minWidth;
+  final Listenable listenable;
+
+  @override
+  _RenderMeasured createRenderObject(BuildContext context) =>
+      _RenderMeasured(measure, minWidth, listenable);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderMeasured renderObject) {
+    renderObject
+      ..measure = measure
+      ..minWidth = minWidth
+      ..listenable = listenable
+      ..markNeedsLayout();
+  }
+}
+
+class _RenderMeasured extends RenderProxyBox {
+  _RenderMeasured(this.measure, this.minWidth, this._listenable);
+
+  Size Function(double maxWidth) measure;
+  double Function() minWidth;
+
+  Listenable _listenable;
+  set listenable(Listenable value) {
+    if (identical(value, _listenable)) return;
+    if (attached) _listenable.removeListener(markNeedsLayout);
+    _listenable = value;
+    if (attached) _listenable.addListener(markNeedsLayout);
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    // The zoom changes the size; cached intrinsic sizes must be dropped.
+    _listenable.addListener(markNeedsLayout);
+  }
+
+  @override
+  void detach() {
+    _listenable.removeListener(markNeedsLayout);
+    super.detach();
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) => minWidth();
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      measure(double.infinity).width;
+
+  @override
+  double computeMinIntrinsicHeight(double width) => measure(width).height;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => measure(width).height;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) =>
+      constraints.constrain(measure(constraints.maxWidth));
+}
+
 /// Where every token is drawn this frame, and how opaque it is.
 class _Frame {
   _Frame(this.layout, this.from, this.to, this.move, this.z, this.fade)
       : positions = List.filled(layout.text.tokens.length, null),
         opacities = List.filled(layout.text.tokens.length, 0) {
     final tokens = layout.text.tokens;
+    final lo = z.floor(), hi = lo + 1;
     for (var i = 0; i < tokens.length; i++) {
       final a = from.offsets[i], b = to.offsets[i];
       if (a == null && b == null) continue;
       positions[i] =
           (a != null && b != null) ? Offset.lerp(a, b, move)! : (a ?? b)!;
-      opacities[i] = _opacity(tokens[i]);
+      var opacity = _opacity(tokens[i]);
+      // Shown at one level but cut off by maxLines at the other: fade with
+      // the move. (Without maxLines this never happens.)
+      if (a == null && tokens[i].isVisibleAt(lo)) opacity *= move;
+      if (b == null && tokens[i].isVisibleAt(hi) && z > lo) {
+        opacity *= 1 - move;
+      }
+      opacities[i] = opacity;
+    }
+    final ea = from.ellipsis, eb = to.ellipsis;
+    if (ea != null && eb != null) {
+      ellipsis = Offset.lerp(ea, eb, move);
+      ellipsisOpacity = 1;
+    } else if (ea != null) {
+      ellipsis = ea;
+      ellipsisOpacity = 1 - move;
+    } else if (eb != null) {
+      ellipsis = eb;
+      ellipsisOpacity = move;
     }
   }
+
+  /// Where "…" is drawn this frame, and how opaque it is.
+  Offset? ellipsis;
+  double ellipsisOpacity = 0;
 
   final LeveledTextLayout layout;
   final LevelLayout from, to;
@@ -351,6 +623,21 @@ class _MorphPainter extends CustomPainter {
     }
 
     _paintLinkGaps(canvas);
+
+    final e = f.ellipsis;
+    if (e != null && f.ellipsisOpacity > 0) {
+      final painter = f.layout._ellipsisPainter;
+      if (f.ellipsisOpacity >= 1) {
+        painter.paint(canvas, e);
+      } else {
+        canvas.saveLayer(
+          (e & painter.size).inflate(2),
+          Paint()..color = Color.fromRGBO(0, 0, 0, f.ellipsisOpacity),
+        );
+        painter.paint(canvas, e);
+        canvas.restore();
+      }
+    }
 
     for (final MapEntry(key: opacity, value: items) in fading.entries) {
       var bounds = Rect.zero;

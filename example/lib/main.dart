@@ -636,29 +636,18 @@ final _messages = <(bool, String, LeveledText)>[
   ),
 ];
 
-class ChatDemo extends StatefulWidget {
+/// Uses DefaultSemanticZoomController: no StatefulWidget, vsync or
+/// dispose() needed.
+class ChatDemo extends StatelessWidget {
   const ChatDemo({super.key});
 
   @override
-  State<ChatDemo> createState() => _ChatDemoState();
-}
-
-class _ChatDemoState extends State<ChatDemo>
-    with SingleTickerProviderStateMixin {
-  late final _zoom = SemanticZoomController(
-    vsync: this,
-    levelCount: 3,
+  Widget build(BuildContext context) => DefaultSemanticZoomController(
     levelLabels: const ['Gist', 'Short', 'Full message'],
+    builder: _build,
   );
 
-  @override
-  void dispose() {
-    _zoom.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _build(BuildContext context, SemanticZoomController zoom) {
     final scheme = Theme.of(context).colorScheme;
     return Column(
       children: [
@@ -668,7 +657,7 @@ class _ChatDemoState extends State<ChatDemo>
         ),
         Expanded(
           child: SemanticZoomListView.builder(
-            controller: _zoom,
+            controller: zoom,
             restorationId: 'chat',
             reverse: true,
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -695,7 +684,7 @@ class _ChatDemoState extends State<ChatDemo>
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: _TapToExpand(
-                        controller: _zoom,
+                        controller: zoom,
                         itemId: i,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
@@ -727,7 +716,7 @@ class _ChatDemoState extends State<ChatDemo>
           ),
         ),
         _LevelSelector(
-          controller: _zoom,
+          controller: zoom,
           labels: const ['Gist', 'Short', 'Full'],
         ),
       ],
@@ -801,42 +790,47 @@ class ReadsDemo extends StatelessWidget {
           subtitle: 'Tap an article or use Show more. No controller needed.',
         ),
         Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            itemCount: _articles.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, i) {
-              final (title, text) = _articles[i];
-              return Card.outlined(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 8, 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      ExpandableLeveledText(
-                        text,
-                        // Keeps the card open after scrolling away and back.
-                        key: PageStorageKey('read-$i'),
-                        style: theme.textTheme.bodyLarge?.copyWith(height: 1.4),
-                        linkStyle: _linkStyle(context),
-                        onLinkTap: (url) => _openLink(context, url),
-                        footerBuilder: (context, level, max, toggle) => Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: toggle,
-                            child: Text(
-                              level < max ? 'Show more' : 'Show less',
+          // Long-press (or drag with a mouse) to select and copy text.
+          child: SelectionArea(
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              itemCount: _articles.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, i) {
+                final (title, text) = _articles[i];
+                return Card.outlined(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 8, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: theme.textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        ExpandableLeveledText(
+                          text,
+                          // Keeps the card open after scrolling away and back.
+                          key: PageStorageKey('read-$i'),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            height: 1.4,
+                          ),
+                          linkStyle: _linkStyle(context),
+                          onLinkTap: (url) => _openLink(context, url),
+                          footerBuilder: (context, level, max, toggle) => Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: toggle,
+                              child: Text(
+                                level < max ? 'Show more' : 'Show less',
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ],

@@ -79,6 +79,10 @@ It suits anything with summaries and details:
   expanded card open when it scrolls away and back.
 - ⚡ **Fast.** 97–99% of frames within the 8.3 ms budget of a 120 Hz
   screen on a mid-range phone, with 1,000 entries (see Performance).
+- 🧩 **Works where `Text` works.** In rows, chips, tables and intrinsic
+  layouts, with `textAlign`, `maxLines` and an ellipsis.
+- ✂️ **Selectable.** Inside a `SelectionArea`, text can be selected and
+  copied whenever it isn't moving.
 - 🧱 **Composable.** A one-widget list or grid, or the pieces inside your
   own `CustomScrollView`. Any number of levels.
 
@@ -91,50 +95,45 @@ flutter pub add semantic_zoom
 ## Quick start
 
 ```dart
-class Journal extends StatefulWidget {
+// plain = brief, [brackets] = medium, {braces} = full
+final entries = [
+  LeveledText.parse(
+    '[Took] Tram 28 [up] to Alfama{, standing room only}'
+    '[. Found a tiny bakery.]',
+  ),
+  // or plain versions, briefest first (e.g. from an LLM)
+  LeveledText.fromVersions(const [
+    'Port tasting',
+    'Port tasting in Gaia',
+    'Port tasting in Gaia: tawny, ruby and a surprising white.',
+  ]),
+];
+
+class Journal extends StatelessWidget {
   const Journal({super.key});
-  @override
-  State<Journal> createState() => _JournalState();
-}
-
-class _JournalState extends State<Journal> with SingleTickerProviderStateMixin {
-  late final zoom = SemanticZoomController(vsync: this);
-
-  final entries = [
-    // plain = brief, [brackets] = medium, {braces} = full
-    LeveledText.parse(
-      '[Took] Tram 28 [up] to Alfama{, standing room only}'
-      '[. Found a tiny bakery.]',
-    ),
-    // or plain versions, briefest first (e.g. from an LLM)
-    LeveledText.fromVersions(const [
-      'Port tasting',
-      'Port tasting in Gaia',
-      'Port tasting in Gaia: tawny, ruby and a surprising white.',
-    ]),
-  ];
 
   @override
-  void dispose() {
-    zoom.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => SemanticZoomListView.builder(
-        controller: zoom,
-        itemCount: entries.length,
-        itemBuilder: (context, i) => InkWell(
-          // Tap one entry to step just that entry to the next level.
-          onTap: () => zoom.setItemLevel(i, zoom.itemLevel(i) + 1),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: LeveledTextView(entries[i], itemId: i),
+  Widget build(BuildContext context) => DefaultSemanticZoomController(
+        builder: (context, zoom) => SemanticZoomListView.builder(
+          controller: zoom,
+          itemCount: entries.length,
+          itemBuilder: (context, i) => InkWell(
+            // Tap one entry to step just that entry to the next level.
+            onTap: () => zoom.setItemLevel(i, zoom.itemLevel(i) + 1),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: LeveledTextView(entries[i], itemId: i),
+            ),
           ),
         ),
       );
 }
 ```
+
+`DefaultSemanticZoomController` creates and disposes the controller for
+you, like `DefaultTabController`. Widgets below it can find it with
+`DefaultSemanticZoomController.of(context)`. If you'd rather own it, create
+a `SemanticZoomController(vsync: this)` in a `State` and `dispose()` it.
 
 Add a button for people who can't or won't pinch:
 
@@ -173,6 +172,37 @@ ExpandableLeveledText(
 
 Use a `GlobalKey<ExpandableLeveledTextState>` to call `expand()`,
 `collapse()` or `next()` from elsewhere, and `onLevelChanged` to persist it.
+
+## Alignment, line limits and selection
+
+`LeveledTextView` takes the same options as `Text`:
+
+```dart
+LeveledTextView(
+  text,
+  textAlign: TextAlign.center,     // also end, justify, …
+  maxLines: 3,
+  overflow: TextOverflow.ellipsis, // "…" after the last whole word
+)
+```
+
+Words past `maxLines` fade out as the text grows; screen readers still get
+the whole text.
+
+Inside a `SelectionArea`, the text can be selected and copied, just like
+`Text`. While the text is morphing it's drawn word by word; as soon as it's
+at rest it becomes real, selectable text that looks exactly the same.
+
+```dart
+SelectionArea(
+  child: SemanticZoomListView.builder(/* … */),
+)
+```
+
+`LeveledTextView` also works where `Text` does: in a `Row` without
+`Expanded`, a `Chip`, a `Table`, `IntrinsicHeight` and so on. With a
+bounded width it fills it (so the text never jumps sideways as it grows);
+with an unbounded width it's as wide as its text.
 
 ## Your content
 
@@ -401,13 +431,14 @@ zoom.addListener(() => settingsCubit.saveDetailLevel(zoom.level));
 | Class | Role |
 |---|---|
 | `SemanticZoomController` | Continuous `zoom`, committed `level`, `animateToLevel`, `setItemLevel`, `itemLevel`, `levelLabels`, `holdAnchor` |
+| `DefaultSemanticZoomController` | Creates, provides and disposes a controller for you |
 | `SemanticZoomListView.builder` | Ready-made list: detector + scroll view + anchored sliver; `reverse` for chats |
 | `SemanticZoomGridView.builder` | Ready-made responsive grid |
 | `SemanticZoomDetector` | Turns touch, trackpad, wheel and keyboard input into zoom |
 | `SliverSemanticZoomList` | `SliverList` with scroll anchoring applied during layout |
 | `SliverSemanticZoomGrid` | The grid as a sliver, for your own scroll view |
 | `LazyLeveledTextView` / `LeveledTextLoader` | Brief text now, longer versions loaded on demand |
-| `LeveledTextView` | Paints `LeveledText`, morphing between levels; `itemId` for per-item zoom; `onLinkTap` |
+| `LeveledTextView` | Paints `LeveledText`, morphing between levels; `itemId`, `onLinkTap`, `textAlign`, `maxLines`, `overflow`; selectable in a `SelectionArea` |
 | `ExpandableLeveledText` | One tap-to-expand text, no controller needed |
 | `LeveledText` / `LeveledToken` | The data model, with `parse`, `fromVersions` and `checkVersions` |
 | `LeveledPrompt` | LLM prompt builder and response parser |
